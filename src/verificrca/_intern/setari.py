@@ -89,5 +89,8 @@ def construieste_setari(
     if isinstance(timeout_ms, bool) or not isinstance(timeout_ms, (int, float)) or not timeout_ms > 0:
         raise EroareConfigurare("`timeout_ms` trebuie sa fie pozitiv.")
 
+    if user_agent and not (user_agent.isascii() and user_agent.isprintable()):
+        raise EroareConfigurare("`user_agent` contine caractere neacceptate (doar ASCII tiparibil).")
+
     agent = f"verificrca-sdk-python/{VERSIUNE_SDK}" + (f" {user_agent}" if user_agent else "")
     return Setari(cheie, base_url.rstrip("/"), timeout_ms, _construieste_retry(retry), agent)

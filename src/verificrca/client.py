@@ -14,13 +14,13 @@ from ._intern.setari import SetariRetry, construieste_setari
 from ._intern.vehicule import ListaVehicule, Stergere, VehiculCreat, cerere_adauga, cerere_lista, cerere_sterge
 from ._intern.verificari import (
     INTERVAL_IMPLICIT_MS,
-    INTERVAL_MINIM_MS,
     TIMEOUT_IMPLICIT_MS,
     Referinta,
     cerere_porneste,
     cerere_rezultat,
     eroare_depasit,
     interpreteaza,
+    valideaza_asteptare,
 )
 from ._versiune import URL_IMPLICIT
 from .erori import EroareTimeoutVerificare
@@ -72,7 +72,7 @@ class ClientVerificari:
 
         `interval_ms` are minim 2000. Peste `timeout_ms` arunca `EroareTimeoutVerificare`.
         """
-        interval = max(INTERVAL_MINIM_MS, interval_ms)
+        interval, timeout_ms = valideaza_asteptare(interval_ms, timeout_ms)
         termen = self._ceas.monoton_ms() + timeout_ms
         while True:
             ramas = termen - self._ceas.monoton_ms()

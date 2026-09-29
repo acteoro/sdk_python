@@ -84,3 +84,10 @@ def test_retry_tip_invalid() -> None:
 
 def test_user_agent_propriu() -> None:
     assert setari_test(user_agent="flota-mea/2.1").user_agent.endswith(" flota-mea/2.1")
+
+
+@pytest.mark.parametrize("agent", ["flota-mea/ă", "flota\nX-Injectat: 1", "tab\tagent"])
+def test_user_agent_cu_caractere_neacceptate(agent: str) -> None:
+    with pytest.raises(EroareConfigurare) as info:
+        setari_test(user_agent=agent)
+    assert info.value.mesaj == "`user_agent` contine caractere neacceptate (doar ASCII tiparibil)."

@@ -238,3 +238,22 @@ def test_context_manager_inchide_doar_clientul_propriu() -> None:
     with VerificRca(api_key=CHEIE) as vrca:
         propriu = vrca._client
     assert propriu.is_closed
+
+
+@pytest.mark.parametrize("valoare", [float("nan"), "30", True])
+def test_asteapta_timeout_invalid_nu_intra_in_bucla(valoare: object) -> None:
+    server = ServerFals()
+    with pytest.raises(EroareValidare) as info:
+        client(server).verificari.asteapta(
+            ReferintaVerificare(tip="rca", query="B123ABC"),
+            timeout_ms=valoare,  # type: ignore[arg-type]
+        )
+    assert (info.value.camp, info.value.cod) == ("timeout_ms", "VALIDARE_LOCALA")
+    assert server.cereri == []
+
+
+def test_asteapta_interval_nan_foloseste_minimul() -> None:
+    ceas = CeasFals()
+    server = ServerFals(json_raspuns(200, FINAL))
+    client(server, ceas).verificari.asteapta(ReferintaVerificare(tip="rca", query="B123ABC"), interval_ms=float("nan"))
+    assert ceas.somnuri == [2000]

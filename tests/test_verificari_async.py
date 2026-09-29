@@ -70,3 +70,11 @@ async def test_context_manager_async() -> None:
     async with AsyncVerificRca(api_key=CHEIE) as vrca:
         propriu = vrca._client
     assert propriu.is_closed
+
+
+async def test_asteapta_timeout_nan() -> None:
+    server = ServerFals()
+    with pytest.raises(EroareValidare):
+        await client(server).verificari.asteapta(
+            ReferintaVerificare(tip="itp", query="WVWZZZ1JZXW000001"), timeout_ms=float("nan")
+        )

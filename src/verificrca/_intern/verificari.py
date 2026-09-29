@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import math
 from typing import Literal
 from urllib.parse import parse_qs, urlsplit
 
 from pydantic import AwareDatetime
 
-from ..erori import EroareTimeoutVerificare, EroareVerificare
+from ..erori import EroareTimeoutVerificare, EroareValidare, EroareVerificare
 from ..modele import Baza, Cota, Limite, ReferintaVerificare, VerificareFinala, VerificareInCurs
 from ..tipuri import TipVerificare
 from ..validare import TintaVerificare
@@ -127,3 +128,12 @@ def eroare_depasit(ref: Referinta, timeout_ms: float) -> EroareTimeoutVerificare
         f"Verificarea {ref.tip.value} pentru {ref.query} nu s-a finalizat in {round(timeout_ms / 1000)} secunde.",
         cod="TIMEOUT_VERIFICARE",
     )
+
+
+def valideaza_asteptare(interval_ms: float, timeout_ms: float) -> tuple[float, float]:
+    """Intoarce (interval, timeout) efective; un timeout NaN ar face bucla de polling infinita."""
+    if isinstance(timeout_ms, bool) or not isinstance(timeout_ms, (int, float)) or math.isnan(timeout_ms):
+        raise EroareValidare("`timeout_ms` trebuie sa fie un numar.", cod="VALIDARE_LOCALA", camp="timeout_ms")
+    if isinstance(interval_ms, bool) or not isinstance(interval_ms, (int, float)) or math.isnan(interval_ms):
+        return INTERVAL_MINIM_MS, timeout_ms
+    return max(INTERVAL_MINIM_MS, interval_ms), timeout_ms

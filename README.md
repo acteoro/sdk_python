@@ -467,7 +467,7 @@ SDK-ul nu trimite niciodată de două ori o verificare taxată.
 | DNS, conexiune refuzată, eroare TLS, timeout la conectare | se reîncearcă | se reîncearcă (sigur nu a ajuns) |
 | 502, 503, 504 | se reîncearcă | se reîncearcă (proxy, nu aplicația) |
 | 500 | se reîncearcă | nu |
-| 429 la polling | se reîncearcă după `Retry-After` | |
+| 429 la polling | se reîncearcă după `Retry-After`, dacă acesta nu depășește `intarziere_maxima_ms` | |
 | 429 cotă sau plafon flotă | nu | nu |
 | 4xx | nu | nu |
 
