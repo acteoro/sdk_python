@@ -19,6 +19,18 @@ from .erori import (
     EroareWebhook,
     VerificRcaError,
 )
+from .modele import (
+    Cota,
+    Limite,
+    ReferintaVerificare,
+    Vehicul,
+    VehiculWebhook,
+    VerificareFinala,
+    VerificareInCurs,
+    WebhookDocumentExpira,
+    WebhookRezultat,
+    WebhookTest,
+)
 from .tipuri import StatusDocument, StatusWebhook, TipVerificare
 from .validare import TIPURI_VERIFICARE, este_numar_inmatriculare_valid, este_vin_valid, normalizeaza
 
@@ -26,6 +38,7 @@ __all__ = [
     "TIPURI_VERIFICARE",
     "URL_IMPLICIT",
     "VERSIUNE_SDK",
+    "Cota",
     "EroareAutentificare",
     "EroareConfigurare",
     "EroareConflict",
@@ -41,10 +54,19 @@ __all__ = [
     "EroareValidare",
     "EroareVerificare",
     "EroareWebhook",
+    "Limite",
+    "ReferintaVerificare",
     "StatusDocument",
     "StatusWebhook",
     "TipVerificare",
+    "Vehicul",
+    "VehiculWebhook",
     "VerificRcaError",
+    "VerificareFinala",
+    "VerificareInCurs",
+    "WebhookDocumentExpira",
+    "WebhookRezultat",
+    "WebhookTest",
     "__version__",
     "este_numar_inmatriculare_valid",
     "este_vin_valid",
