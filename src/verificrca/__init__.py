@@ -1,5 +1,6 @@
 """SDK Python oficial pentru API-ul verificrca.ro: verificare RCA, ITP, rovinieta si ARR."""
 
+from ._intern.setari import SetariRetry
 from ._versiune import URL_IMPLICIT, VERSIUNE_SDK, __version__
 from .erori import (
     EroareAutentificare,
@@ -56,6 +57,7 @@ __all__ = [
     "EroareWebhook",
     "Limite",
     "ReferintaVerificare",
+    "SetariRetry",
     "StatusDocument",
     "StatusWebhook",
     "TipVerificare",
