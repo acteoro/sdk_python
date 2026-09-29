@@ -2,6 +2,8 @@
 
 from ._intern.setari import SetariRetry
 from ._versiune import URL_IMPLICIT, VERSIUNE_SDK, __version__
+from .client import ClientVerificari, VerificRca
+from .client_async import AsyncClientVerificari, AsyncVerificRca
 from .erori import (
     EroareAutentificare,
     EroareConfigurare,
@@ -39,6 +41,9 @@ __all__ = [
     "TIPURI_VERIFICARE",
     "URL_IMPLICIT",
     "VERSIUNE_SDK",
+    "AsyncClientVerificari",
+    "AsyncVerificRca",
+    "ClientVerificari",
     "Cota",
     "EroareAutentificare",
     "EroareConfigurare",
@@ -63,6 +68,7 @@ __all__ = [
     "TipVerificare",
     "Vehicul",
     "VehiculWebhook",
+    "VerificRca",
     "VerificRcaError",
     "VerificareFinala",
     "VerificareInCurs",
