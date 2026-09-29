@@ -20,8 +20,10 @@ from .erori import (
     VerificRcaError,
 )
 from .tipuri import StatusDocument, StatusWebhook, TipVerificare
+from .validare import TIPURI_VERIFICARE, este_numar_inmatriculare_valid, este_vin_valid, normalizeaza
 
 __all__ = [
+    "TIPURI_VERIFICARE",
     "URL_IMPLICIT",
     "VERSIUNE_SDK",
     "EroareAutentificare",
@@ -44,4 +46,7 @@ __all__ = [
     "TipVerificare",
     "VerificRcaError",
     "__version__",
+    "este_numar_inmatriculare_valid",
+    "este_vin_valid",
+    "normalizeaza",
 ]
