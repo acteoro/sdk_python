@@ -9,7 +9,9 @@ import httpx
 
 from ._intern.ceas import Ceas, CeasSistem
 from ._intern.http_sync import Http
+from ._intern.raspunsuri import decodeaza
 from ._intern.setari import SetariRetry, construieste_setari
+from ._intern.vehicule import ListaVehicule, Stergere, VehiculCreat, cerere_adauga, cerere_lista, cerere_sterge
 from ._intern.verificari import (
     INTERVAL_IMPLICIT_MS,
     INTERVAL_MINIM_MS,
@@ -22,9 +24,9 @@ from ._intern.verificari import (
 )
 from ._versiune import URL_IMPLICIT
 from .erori import EroareTimeoutVerificare
-from .modele import VerificareFinala, VerificareInCurs
+from .modele import Vehicul, VerificareFinala, VerificareInCurs
 from .tipuri import TipVerificare
-from .validare import valideaza_cerere_verificare
+from .validare import valideaza_cerere_verificare, valideaza_vehicul_nou
 
 
 class ClientVerificari:
@@ -108,6 +110,35 @@ class ClientVerificari:
         return interpreteaza(raspuns, ref.serie_sasiu, ref.since, self._ceas.acum_ms())
 
 
+class ClientVehicule:
+    """Flota monitorizata din cont. Il accesezi prin `vrca.vehicule`. Operatiile sunt gratuite."""
+
+    def __init__(self, http: Http) -> None:
+        self._http = http
+
+    def lista(self) -> list[Vehicul]:
+        """Vehiculele din cont, cu datele de expirare ale documentelor."""
+        return decodeaza(ListaVehicule, self._http.trimite(cerere_lista())).vehicule
+
+    def adauga(
+        self,
+        *,
+        numar_inmatriculare: str | None = None,
+        serie_sasiu: str | None = None,
+        arr_monitorizat: bool | None = None,
+    ) -> Vehicul:
+        """Adauga un vehicul in monitorizare. Respecta limita de masini a planului.
+
+        Trimite cel putin numarul sau seria de sasiu. `arr_monitorizat` cere un plan activ.
+        """
+        corp = valideaza_vehicul_nou(numar_inmatriculare, serie_sasiu, arr_monitorizat)
+        return decodeaza(VehiculCreat, self._http.trimite(cerere_adauga(corp))).vehicul
+
+    def sterge(self, id: str) -> None:
+        """Scoate un vehicul din cont, dupa `Vehicul.id`."""
+        decodeaza(Stergere, self._http.trimite(cerere_sterge(id)))
+
+
 class VerificRca:
     """Clientul sincron pentru API-ul verificrca.ro.
 
@@ -138,6 +169,7 @@ class VerificRca:
         ceas = _ceas or CeasSistem()
         http = Http(setari, self._client, ceas, _aleator or random.random)
         self.verificari = ClientVerificari(http, ceas)
+        self.vehicule = ClientVehicule(http)
 
     def close(self) -> None:
         """Inchide conexiunile clientului httpx construit de SDK (nu si pe cel injectat)."""
