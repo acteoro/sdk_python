@@ -1,0 +1,36 @@
+name: Publicare PyPI
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: pypi
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+
+      - name: Tag-ul trebuie sa corespunda versiunii din _versiune.py
+        run: |
+          VERSIUNE="v$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' src/verificrca/_versiune.py)"
+          if [ "$VERSIUNE" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME diferit de versiunea din _versiune.py ($VERSIUNE)"
+            exit 1
+          fi
+
+      - run: uv sync --locked
+      - run: uv run pytest
+      - run: uv run mypy
+      - run: uv build
+      # Trusted publishing (OIDC): proiectul PyPI are configurat acest repo si acest workflow.
+      - run: uv publish --trusted-publishing always
