@@ -1,4 +1,4 @@
-"""Validarea locala a numerelor de inmatriculare, a VIN-urilor si a cererilor.
+"""Validarea locala a numerelor de inmatriculare, a VIN-urilor, a seriilor de talon si a cererilor.
 
 Aceleasi reguli ca prevalidarea din API. O cerere pe care sursa oficiala ar refuza-o
 oricum e oprita aici: nu pleaca pe retea si nu consuma din cota.
@@ -27,6 +27,9 @@ _NUMAR_FLOTA = re.compile(r"[A-Z0-9\s-]*", re.IGNORECASE | re.ASCII)
 _SERIE_FLOTA = re.compile(r"[A-Z0-9]*", re.IGNORECASE | re.ASCII)
 _SEPARATORI = re.compile(r"[\s\-_]")
 _LUNGIME_VIN = 17
+_SERIE_TALON = re.compile(r"(?=.*\d)[A-Z0-9]{6,20}", re.ASCII)
+_NU_ALFANUMERIC = re.compile(r"[^A-Z0-9]", re.ASCII)
+_LUNGIME_MAXIMA_TALON = 30
 
 TIPURI_VERIFICARE: tuple[TipVerificare, ...] = tuple(TipVerificare)
 """Toate tipurile de verificare acceptate de API, in ordine: rca, itp, rovinieta, arr."""
@@ -52,6 +55,29 @@ def este_numar_inmatriculare_valid(valoare: str) -> bool:
 def este_vin_valid(valoare: str) -> bool:
     """Verifica un VIN dupa ISO 3779: exact 17 caractere, cifre si litere, fara I, O si Q."""
     return _VIN.fullmatch(normalizeaza(valoare)) is not None
+
+
+def normalizeaza_serie_talon(valoare: str) -> str:
+    """Aduce numarul certificatului de inmatriculare (talon) la forma canonica: doar litere si cifre, cu majuscule.
+
+    >>> normalizeaza_serie_talon(" i 00639603-f ")
+    'I00639603F'
+    """
+    return _NU_ALFANUMERIC.sub("", valoare.upper())
+
+
+def este_serie_talon_valida(valoare: str) -> bool:
+    """Verifica forma numarului certificatului de inmatriculare: 6-20 litere si cifre, cel putin o cifra.
+
+    Numarul e tiparit jos pe talon, la "Numarul certificatului" (ex: I00639603F). Accepta si forme
+    cu spatii sau cratime. Validarea completa o face sursa oficiala, impreuna cu numarul si VIN-ul.
+    """
+    return _SERIE_TALON.fullmatch(normalizeaza_serie_talon(valoare)) is not None
+
+
+_MESAJ_TALON_INVALID = (
+    "`serie_talon` invalid: se asteapta numarul certificatului de inmatriculare, tiparit jos pe talon (ex: I00639603F)."
+)
 
 
 def _este_numar(valoare: str) -> bool:
@@ -82,6 +108,8 @@ class TintaVerificare:
     query: str
     serie_sasiu: str | None
     callback_url: str | None
+    serie_talon: str | None = None
+    """Doar la rovinieta."""
 
 
 def _valideaza_callback_url(brut: str | None) -> str | None:
@@ -151,11 +179,28 @@ def _valideaza_identificatori(tip: TipVerificare, query: str, serie: str) -> tup
     return query, serie
 
 
+def _valideaza_serie_talon(tip: TipVerificare, brut: str | None) -> str | None:
+    """Seria talonului e ceruta doar la rovinieta; la celelalte tipuri nu se trimite."""
+    if tip is not TipVerificare.ROVINIETA:
+        return None
+    serie = normalizeaza_serie_talon(brut) if isinstance(brut, str) else ""
+    if not serie:
+        raise _eroare(
+            "Verificarea rovinietei cere si numarul certificatului de inmatriculare (talon) in `serie_talon` "
+            "(ex: I00639603F).",
+            "serie_talon",
+        )
+    if _SERIE_TALON.fullmatch(serie) is None:
+        raise _eroare(_MESAJ_TALON_INVALID, "serie_talon")
+    return serie
+
+
 def valideaza_cerere_verificare(
     tip: TipVerificare | str,
     query: str,
     serie_sasiu: str | None = None,
     callback_url: str | None = None,
+    serie_talon: str | None = None,
 ) -> TintaVerificare:
     """Valideaza si normalizeaza o cerere de verificare, cu aceleasi reguli ca API-ul."""
     try:
@@ -165,13 +210,15 @@ def valideaza_cerere_verificare(
     q = normalizeaza(query) if isinstance(query, str) else ""
     serie = normalizeaza(serie_sasiu) if isinstance(serie_sasiu, str) else ""
     query_final, serie_finala = _valideaza_identificatori(tip_valid, q, serie)
-    return TintaVerificare(tip_valid, query_final, serie_finala, _valideaza_callback_url(callback_url))
+    talon = _valideaza_serie_talon(tip_valid, serie_talon)
+    return TintaVerificare(tip_valid, query_final, serie_finala, _valideaza_callback_url(callback_url), talon)
 
 
 def valideaza_vehicul_nou(
     numar_inmatriculare: str | None,
     serie_sasiu: str | None,
     arr_monitorizat: bool | None,
+    serie_talon: str | None = None,
 ) -> dict[str, object]:
     """Valideaza un vehicul nou cu regulile API-ului si intoarce corpul cererii (chei camelCase)."""
     numar = numar_inmatriculare.strip() if isinstance(numar_inmatriculare, str) else ""
@@ -185,6 +232,13 @@ def valideaza_vehicul_nou(
     if serie and (len(serie) > 50 or _SERIE_FLOTA.fullmatch(serie) is None):
         raise _eroare("`serie_sasiu` poate contine doar litere si cifre (maxim 50).", "serie_sasiu")
 
+    talon = serie_talon.strip() if isinstance(serie_talon, str) else ""
+    if len(talon) > _LUNGIME_MAXIMA_TALON:
+        raise _eroare(_MESAJ_TALON_INVALID, "serie_talon")
+    talon_norm = normalizeaza_serie_talon(talon)
+    if talon_norm and _SERIE_TALON.fullmatch(talon_norm) is None:
+        raise _eroare(_MESAJ_TALON_INVALID, "serie_talon")
+
     numar_norm = re.sub(r"[\s-]+", "", numar.upper())
     serie_norm = serie.upper()
     if not numar_norm and not serie_norm:
@@ -195,6 +249,8 @@ def valideaza_vehicul_nou(
         corp["numarInmatriculare"] = numar_norm
     if serie_norm:
         corp["serieSasiu"] = serie_norm
+    if talon_norm:
+        corp["serieTalon"] = talon_norm
     if arr_monitorizat is not None:
         corp["arrMonitorizat"] = arr_monitorizat
     return corp

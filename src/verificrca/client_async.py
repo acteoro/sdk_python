@@ -42,10 +42,11 @@ class AsyncClientVerificari:
         tip: TipVerificare | str,
         query: str,
         serie_sasiu: str | None = None,
+        serie_talon: str | None = None,
         callback_url: str | None = None,
     ) -> VerificareFinala | VerificareInCurs:
         """Porneste o verificare (POST). Consuma o unitate din cota."""
-        tinta = valideaza_cerere_verificare(tip, query, serie_sasiu, callback_url)
+        tinta = valideaza_cerere_verificare(tip, query, serie_sasiu, callback_url, serie_talon)
         inainte = self._ceas.acum_ms()
         raspuns = await self._http.trimite(cerere_porneste(tinta))
         return interpreteaza(raspuns, tinta.serie_sasiu, inainte, self._ceas.acum_ms())
@@ -85,12 +86,15 @@ class AsyncClientVerificari:
         tip: TipVerificare | str,
         query: str,
         serie_sasiu: str | None = None,
+        serie_talon: str | None = None,
         callback_url: str | None = None,
         interval_ms: float = INTERVAL_IMPLICIT_MS,
         timeout_ms: float = TIMEOUT_IMPLICIT_MS,
     ) -> VerificareFinala:
         """Porneste verificarea si asteapta rezultatul final. Consuma o unitate din cota."""
-        raspuns = await self.porneste(tip=tip, query=query, serie_sasiu=serie_sasiu, callback_url=callback_url)
+        raspuns = await self.porneste(
+            tip=tip, query=query, serie_sasiu=serie_sasiu, serie_talon=serie_talon, callback_url=callback_url
+        )
         if isinstance(raspuns, VerificareInCurs):
             return await self.asteapta(raspuns, interval_ms=interval_ms, timeout_ms=timeout_ms)
         return raspuns
@@ -115,10 +119,11 @@ class AsyncClientVehicule:
         *,
         numar_inmatriculare: str | None = None,
         serie_sasiu: str | None = None,
+        serie_talon: str | None = None,
         arr_monitorizat: bool | None = None,
     ) -> Vehicul:
         """Adauga un vehicul in monitorizare. Respecta limita de masini a planului."""
-        corp = valideaza_vehicul_nou(numar_inmatriculare, serie_sasiu, arr_monitorizat)
+        corp = valideaza_vehicul_nou(numar_inmatriculare, serie_sasiu, arr_monitorizat, serie_talon)
         return decodeaza(VehiculCreat, await self._http.trimite(cerere_adauga(corp))).vehicul
 
     async def sterge(self, id: str) -> None:

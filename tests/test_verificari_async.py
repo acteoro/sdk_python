@@ -1,3 +1,5 @@
+import json
+
 import httpx
 import pytest
 
@@ -44,6 +46,19 @@ async def test_porneste_intoarce_in_curs() -> None:
     server = ServerFals(json_raspuns(202, IN_CURS))
     r = await client(server).verificari.porneste(tip="itp", query="WVWZZZ1JZXW000001")
     assert isinstance(r, VerificareInCurs)
+
+
+async def test_rovinieta_cu_serie_talon() -> None:
+    vin = "WVWZZZ1JZXW000001"
+    rov = {**FINAL, "tip": "rovinieta", "query": "B123ABC", "numarInmatriculare": "B123ABC", "status": "valid"}
+    server = ServerFals(json_raspuns(200, rov))
+    r = await client(server).verificari.verifica_si_asteapta(
+        tip="rovinieta", query="B123ABC", serie_sasiu=vin, serie_talon="I00639603F"
+    )
+    assert r.status is StatusDocument.VALID
+    assert json.loads(server.cereri[0].content)["serieTalon"] == "I00639603F"
+    with pytest.raises(EroareValidare):
+        await client(ServerFals()).verificari.porneste(tip="rovinieta", query="B123ABC", serie_sasiu=vin)
 
 
 async def test_validare_locala() -> None:

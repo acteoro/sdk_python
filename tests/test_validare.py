@@ -5,12 +5,15 @@ from verificrca import (
     EroareValidare,
     TipVerificare,
     este_numar_inmatriculare_valid,
+    este_serie_talon_valida,
     este_vin_valid,
     normalizeaza,
+    normalizeaza_serie_talon,
 )
 from verificrca.validare import TintaVerificare, valideaza_cerere_verificare, valideaza_vehicul_nou
 
 VIN = "WVWZZZ1JZXW000001"
+TALON = "I00639603F"
 
 
 def eroare(**kw: object) -> EroareValidare:
@@ -114,13 +117,40 @@ def test_arr_cere_numar() -> None:
 
 
 def test_rovinieta() -> None:
-    t = valideaza_cerere_verificare("rovinieta", "B123ABC", serie_sasiu=VIN)
-    assert (t.query, t.serie_sasiu) == ("B123ABC", VIN)
-    e = eroare(tip="rovinieta", query="B123ABC")
+    t = valideaza_cerere_verificare("rovinieta", "B123ABC", serie_sasiu=VIN, serie_talon=" i 00639603-f ")
+    assert (t.query, t.serie_sasiu, t.serie_talon) == ("B123ABC", VIN, "I00639603F")
+    e = eroare(tip="rovinieta", query="B123ABC", serie_talon=TALON)
     assert e.camp == "serie_sasiu"
     assert e.mesaj.startswith("Verificarea rovinietei cere si seria de sasiu in `serie_sasiu`.")
-    e = eroare(tip="rovinieta", query=VIN, serie_sasiu=VIN)
+    e = eroare(tip="rovinieta", query=VIN, serie_sasiu=VIN, serie_talon=TALON)
     assert e.mesaj == "Verificarea rovinietei cere numarul de inmatriculare in `query` (ex: B123ABC)."
+
+
+def test_rovinieta_cere_serie_talon() -> None:
+    for lipsa in (None, "", " - "):
+        e = eroare(tip="rovinieta", query="B123ABC", serie_sasiu=VIN, serie_talon=lipsa)
+        assert (e.camp, e.cod) == ("serie_talon", "VALIDARE_LOCALA")
+        assert e.mesaj.startswith("Verificarea rovinietei cere si numarul certificatului de inmatriculare")
+
+
+@pytest.mark.parametrize("talon", ["I0063", "IABCDEFG", "I" + "0" * 20])
+def test_rovinieta_serie_talon_invalida(talon: str) -> None:
+    e = eroare(tip="rovinieta", query="B123ABC", serie_sasiu=VIN, serie_talon=talon)
+    assert e.camp == "serie_talon"
+    assert e.mesaj.startswith("`serie_talon` invalid")
+
+
+def test_serie_talon_ignorata_in_afara_rovinietei() -> None:
+    assert valideaza_cerere_verificare("rca", "B123ABC", serie_talon="x").serie_talon is None
+
+
+def test_serie_talon_helperi() -> None:
+    assert normalizeaza_serie_talon(" i 00639603-f ") == "I00639603F"
+    assert este_serie_talon_valida("I00639603F")
+    assert este_serie_talon_valida("123456")
+    assert not este_serie_talon_valida("ABCDEF")
+    assert not este_serie_talon_valida("I0063")
+    assert not este_serie_talon_valida("1" * 21)
 
 
 @pytest.mark.parametrize(
@@ -156,6 +186,19 @@ def test_vehicul_nou() -> None:
         "arrMonitorizat": True,
     }
     assert valideaza_vehicul_nou("B123ABC", VIN, False)["arrMonitorizat"] is False
+    assert valideaza_vehicul_nou("B123ABC", VIN, None, " i00639603f ") == {
+        "numarInmatriculare": "B123ABC",
+        "serieSasiu": VIN,
+        "serieTalon": "I00639603F",
+    }
+    assert "serieTalon" not in valideaza_vehicul_nou("B123ABC", None, None, "  ")
+
+
+@pytest.mark.parametrize("talon", ["ABCDEF", "I0063", "I" * 31 + "1"])
+def test_vehicul_nou_serie_talon_invalida(talon: str) -> None:
+    with pytest.raises(EroareValidare) as info:
+        valideaza_vehicul_nou("B123ABC", None, None, talon)
+    assert info.value.camp == "serie_talon"
 
 
 @pytest.mark.parametrize(

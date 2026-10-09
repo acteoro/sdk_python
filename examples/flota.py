@@ -19,3 +19,5 @@ with VerificRca() as vrca:
         ):
             if data and data <= prag:
                 print(f"{v.numar_inmatriculare or v.serie_sasiu}: {document} expira la {data:%d.%m.%Y}")
+        if v.serie_talon_respinsa:
+            print(f"{v.numar_inmatriculare}: numarul talonului a fost respins, rovinieta nu se mai verifica.")

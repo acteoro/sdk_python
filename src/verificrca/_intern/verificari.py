@@ -19,6 +19,7 @@ CALE = "/api/public/v1/verificare"
 INTERVAL_IMPLICIT_MS = 3_000
 INTERVAL_MINIM_MS = 2_000
 TIMEOUT_IMPLICIT_MS = 300_000
+COD_VERIFICARE_ESUATA = "VERIFICARE_ESUATA"
 
 Referinta = VerificareInCurs | ReferintaVerificare
 
@@ -38,6 +39,7 @@ class _CorpEsuat(Baza):
     query: str
     status: Literal["error"]
     error: str
+    cod: str | None = None
     hint: str | None = None
 
 
@@ -45,6 +47,8 @@ def cerere_porneste(t: TintaVerificare) -> CerereHttp:
     corp: dict[str, object] = {"tip": t.tip.value, "query": t.query}
     if t.serie_sasiu:
         corp["serieSasiu"] = t.serie_sasiu
+    if t.serie_talon:
+        corp["serieTalon"] = t.serie_talon
     if t.callback_url:
         corp["callbackUrl"] = t.callback_url
     return CerereHttp("POST", CALE, False, corp=corp)
@@ -103,7 +107,8 @@ def interpreteaza(
     status = r.corp.get("status") if isinstance(r.corp, dict) else None
     if status == "error":
         esuat = decodeaza(_CorpEsuat, r)
-        raise EroareVerificare(esuat.error, cod="VERIFICARE_ESUATA", hint=esuat.hint, raspuns=r.corp)
+        # `cod` vine doar cand sursa a refuzat datele trimise; atunci o reincercare nu ajuta.
+        raise EroareVerificare(esuat.error, cod=esuat.cod or COD_VERIFICARE_ESUATA, hint=esuat.hint, raspuns=r.corp)
     if status == "processing":
         c = decodeaza(_CorpInCurs, r)
         since = since_din_poll_url(c.poll_url)

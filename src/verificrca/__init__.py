@@ -35,7 +35,14 @@ from .modele import (
     WebhookTest,
 )
 from .tipuri import StatusDocument, StatusWebhook, TipVerificare
-from .validare import TIPURI_VERIFICARE, este_numar_inmatriculare_valid, este_vin_valid, normalizeaza
+from .validare import (
+    TIPURI_VERIFICARE,
+    este_numar_inmatriculare_valid,
+    este_serie_talon_valida,
+    este_vin_valid,
+    normalizeaza,
+    normalizeaza_serie_talon,
+)
 from .webhooks import HEADER_CHEIE, HEADER_EVENIMENT, parseaza_webhook_rezultat, verifica_webhook_notificare
 
 __all__ = [
@@ -82,8 +89,10 @@ __all__ = [
     "WebhookTest",
     "__version__",
     "este_numar_inmatriculare_valid",
+    "este_serie_talon_valida",
     "este_vin_valid",
     "normalizeaza",
+    "normalizeaza_serie_talon",
     "parseaza_webhook_rezultat",
     "verifica_webhook_notificare",
 ]

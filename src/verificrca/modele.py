@@ -99,11 +99,15 @@ class Vehicul(Baza):
     id: str
     numar_inmatriculare: str | None
     serie_sasiu: str | None
+    serie_talon: str | None = None
+    """Numarul certificatului de inmatriculare (talon). Fara el rovinieta nu se verifica."""
+    serie_talon_respinsa: bool = False
+    """Sursa a respins numarul talonului; rovinieta nu se mai verifica pana la corectarea lui."""
     rca_expira_la: AwareDatetime | None
     itp_expira_la: AwareDatetime | None
     """`None` pana la primul rezultat (ITP-ul cere VIN)."""
     rovinieta_expira_la: AwareDatetime | None
-    """`None` pana la primul rezultat (rovinieta cere numar si VIN)."""
+    """`None` pana la primul rezultat (rovinieta cere numar, VIN si numarul talonului)."""
     arr_expira_la: AwareDatetime | None
     """Completata doar cand `arr_monitorizat` e adevarat."""
     arr_monitorizat: bool

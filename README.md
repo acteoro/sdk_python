@@ -44,7 +44,7 @@ with VerificRca() as vrca:  # cheia din VERIFICRCA_API_KEY
 | Verificare copie conformă ARR | Valabilitatea copiei conforme pentru transportatori |
 | Gestionare flotă | Adaugi, listezi și ștergi vehiculele monitorizate automat |
 | Webhook-uri | Rezultatul verificării la URL-ul tău, alerte `document.expira` la 30, 14 și 3 zile |
-| Validare locală | Numărul de înmatriculare și VIN-ul sunt verificate înainte de cerere, deci o greșeală de tastare nu consumă din cotă |
+| Validare locală | Numărul de înmatriculare, VIN-ul și numărul talonului sunt verificate înainte de cerere, deci o greșeală de tastare nu consumă din cotă |
 | Excepții tipate | O clasă de excepție pentru fiecare situație, cu mesaj în română și `hint` de rezolvare |
 | Reîncercări sigure | Backoff exponențial cu jitter, `Retry-After` respectat, niciun POST taxat de două ori |
 | Sync și async | `VerificRca` pentru cod sincron, `AsyncVerificRca` pentru asyncio și FastAPI, cu aceleași metode |
@@ -105,8 +105,11 @@ rovinieta = vrca.verificari.verifica_si_asteapta(
     tip="rovinieta",
     query="B123ABC",
     serie_sasiu="WVWZZZ1JZXW000001",
+    serie_talon="I00639603F",
 )
 ```
+
+Rovinieta cere trei identificatori: numărul de înmatriculare, seria de șasiu și numărul certificatului de înmatriculare (`serie_talon`), tipărit jos pe talon. Sursa oficială le verifică împreună, așa că fără numărul talonului SDK-ul oprește cererea înainte să plece și nu consumă din cotă. Vezi [unde găsești numărul certificatului de înmatriculare](#unde-găsesc-numărul-certificatului-de-înmatriculare).
 
 ### Verificare copie conformă ARR
 
@@ -149,14 +152,14 @@ Pauzele dintre interogări folosesc `anyio.sleep`, deci nu blochează event loop
 
 Fiecare sursă oficială caută după alt identificator. SDK-ul aplică aceleași reguli ca API-ul și te oprește înainte de cerere dacă lipsește ceva.
 
-| `tip` | `query` | `serie_sasiu` | Sursa |
-|---|---|---|---|
-| `rca` | număr de înmatriculare **sau** VIN | opțional, recomandat | AIDA / BAAR |
-| `itp` | VIN (17 caractere) | nu | RAR |
-| `rovinieta` | număr de înmatriculare | **obligatoriu** | CNAIR |
-| `arr` | număr de înmatriculare | nu | ARR |
+| `tip` | `query` | `serie_sasiu` | `serie_talon` | Sursa |
+|---|---|---|---|---|
+| `rca` | număr de înmatriculare **sau** VIN | opțional, recomandat | nu | AIDA / BAAR |
+| `itp` | VIN (17 caractere) | nu | nu | RAR |
+| `rovinieta` | număr de înmatriculare | **obligatoriu** | **obligatoriu** | CNAIR |
+| `arr` | număr de înmatriculare | nu | nu | ARR |
 
-Formatele de număr acceptate: București (`B123ABC`, `B12ABC`), județe (`CJ45XYZ`, `IS08BCD`), corp diplomatic (`CD123A`) și numere temporare (`TC1234AB`). Spațiile și cratimele sunt eliminate automat, deci `b-123 abc` devine `B123ABC`. VIN-ul trebuie să aibă exact 17 caractere, fără literele I, O și Q (standardul ISO 3779).
+Formatele de număr acceptate: București (`B123ABC`, `B12ABC`), județe (`CJ45XYZ`, `IS08BCD`), corp diplomatic (`CD123A`) și numere temporare (`TC1234AB`). Spațiile și cratimele sunt eliminate automat, deci `b-123 abc` devine `B123ABC`. VIN-ul trebuie să aibă exact 17 caractere, fără literele I, O și Q (standardul ISO 3779). Numărul certificatului de înmatriculare (`serie_talon`, de forma `I00639603F`) e păstrat doar cu litere și cifre, cu majuscule, și trebuie să aibă între 6 și 20 de caractere, dintre care cel puțin o cifră. La celelalte tipuri de verificare `serie_talon` e ignorat și nu se trimite.
 
 ## Cum decurge o verificare
 
@@ -180,7 +183,7 @@ Rezultatul final (`VerificareFinala`) are `status` de tip `StatusDocument`:
 | `StatusDocument.EXPIRED` (`"expired"`) | Expirat sau inexistent, confirmat de sursă | data expirării sau `None` |
 | `StatusDocument.NOT_FOUND` (`"not_found"`) | Sursa nu a găsit vehiculul | `None` |
 
-O verificare încă în curs e un obiect `VerificareInCurs`, nu un rezultat. Le deosebești cu `isinstance()`. Când sursa oficială nu răspunde, SDK-ul aruncă `EroareVerificare` și poți relua cererea.
+O verificare încă în curs e un obiect `VerificareInCurs`, nu un rezultat. Le deosebești cu `isinstance()`. Când sursa oficială nu răspunde, SDK-ul aruncă `EroareVerificare` cu `cod` `VERIFICARE_ESUATA` și poți relua cererea. Când sursa refuză datele trimise, `cod` spune care câmp e greșit: `serie_talon_invalida`, `vin_invalid` sau `numar_invalid`. În cazul ăsta o reluare cu aceleași date nu ajută, corectează întâi câmpul.
 
 ## Referință API
 
@@ -201,7 +204,7 @@ Constructorul nu face nicio cerere pe rețea. Aruncă `EroareConfigurare` dacă 
 
 Folosește clientul cu `with` (sau `async with`), ori apelează `close()` / `await aclose()` la final, ca să închizi conexiunile. Un `http_client` dat de tine își păstrează propriul timeout și nu e închis de SDK. Redirecturile nu sunt urmate: un răspuns 3xx devine `EroareHttp`.
 
-### `verificari.porneste(*, tip, query, serie_sasiu=None, callback_url=None)`
+### `verificari.porneste(*, tip, query, serie_sasiu=None, serie_talon=None, callback_url=None)`
 
 Pornește o verificare și **consumă o unitate din cotă**. Întoarce fie rezultatul final (`VerificareFinala`, dacă există unul recent), fie un obiect `VerificareInCurs` pe care îl poți da mai departe la `rezultat()` sau `asteapta()`.
 
@@ -235,26 +238,30 @@ if isinstance(r, VerificareInCurs):
 
 Face polling până la rezultatul final. `interval_ms` are minimum 2000, iar `timeout_ms` e implicit 5 minute. La depășire aruncă `EroareTimeoutVerificare`. Reîncercările se opresc la termen, așa că doar o cerere HTTP deja pornită îl poate depăși, cu cel mult timeout-ul ei.
 
-### `verificari.verifica_si_asteapta(*, tip, query, serie_sasiu=None, callback_url=None, interval_ms=3000, timeout_ms=300000)`
+### `verificari.verifica_si_asteapta(*, tip, query, serie_sasiu=None, serie_talon=None, callback_url=None, interval_ms=3000, timeout_ms=300000)`
 
 `porneste()` urmat de `asteapta()`, într-un singur apel. E calea cea mai simplă pentru scripturi și joburi cron.
 
 ### `vehicule.lista()`
 
-Toate vehiculele din cont, cu datele de expirare `rca_expira_la`, `itp_expira_la`, `rovinieta_expira_la` și `arr_expira_la` (ca `datetime` sau `None`). Câmpul `activ` e `True` cât timp vehiculul e verificat automat și primește notificări de expirare. Vehiculele din cont sunt verificate automat și periodic, deci lista îți dă o imagine la zi a flotei fără să consume din cota de verificări.
+Toate vehiculele din cont, cu datele de expirare `rca_expira_la`, `itp_expira_la`, `rovinieta_expira_la` și `arr_expira_la` (ca `datetime` sau `None`). Câmpul `activ` e `True` cât timp vehiculul e verificat automat și primește notificări de expirare. `serie_talon` e numărul certificatului de înmatriculare salvat pentru vehicul (sau `None`), iar `serie_talon_respinsa` devine `True` când sursa oficială l-a respins: rovinieta nu se mai verifică până când îl corectezi. Vehiculele din cont sunt verificate automat și periodic, deci lista îți dă o imagine la zi a flotei fără să consume din cota de verificări.
 
 ```python
 for v in vrca.vehicule.lista():
     rca = f"{v.rca_expira_la:%d.%m.%Y}" if v.rca_expira_la else "-"
     print(v.numar_inmatriculare, "RCA:", rca)
 
-v = vrca.vehicule.adauga(numar_inmatriculare="B123ABC", serie_sasiu="WVWZZZ1JZXW000001")
+v = vrca.vehicule.adauga(
+    numar_inmatriculare="B123ABC",
+    serie_sasiu="WVWZZZ1JZXW000001",
+    serie_talon="I00639603F",
+)
 vrca.vehicule.sterge(v.id)
 ```
 
-### `vehicule.adauga(*, numar_inmatriculare=None, serie_sasiu=None, arr_monitorizat=None)`
+### `vehicule.adauga(*, numar_inmatriculare=None, serie_sasiu=None, serie_talon=None, arr_monitorizat=None)`
 
-Adaugă un vehicul în monitorizare. Trimite cel puțin un identificator (`numar_inmatriculare`, `serie_sasiu`); opțional `arr_monitorizat`. Poți primi `EroareInterzis` cu `cod` `LIMIT_ATINS` când ai atins numărul de mașini din plan, sau `EroareConflict` când vehiculul există deja.
+Adaugă un vehicul în monitorizare. Trimite cel puțin un identificator (`numar_inmatriculare`, `serie_sasiu`); opționale sunt `serie_talon` și `arr_monitorizat`. Rovinieta unui vehicul din flotă se verifică doar când are număr, VIN și numărul talonului. Poți primi `EroareInterzis` cu `cod` `LIMIT_ATINS` când ai atins numărul de mașini din plan, sau `EroareConflict` când vehiculul există deja.
 
 ### `vehicule.sterge(id)`
 
@@ -265,11 +272,19 @@ Operațiile pe vehicule nu consumă din cota de verificări, dar cer un plan act
 ### Utilitare de validare
 
 ```python
-from verificrca import este_numar_inmatriculare_valid, este_vin_valid, normalizeaza
+from verificrca import (
+    este_numar_inmatriculare_valid,
+    este_serie_talon_valida,
+    este_vin_valid,
+    normalizeaza,
+    normalizeaza_serie_talon,
+)
 
 este_numar_inmatriculare_valid("CJ 45 XYZ")  # True
 este_vin_valid("WVWZZZ1JZXW00000I")  # False: litera I nu e permisă în VIN
 normalizeaza(" b-123 abc ")  # "B123ABC"
+este_serie_talon_valida("I00639603F")  # True
+normalizeaza_serie_talon(" i 00639603-f ")  # "I00639603F"
 ```
 
 Le poți folosi în formularele tale (de exemplu într-un validator Django sau Pydantic), ca să verifici datele înainte să ajungă la server.
@@ -434,7 +449,7 @@ Toate excepțiile moștenesc `VerificRcaError`, care moștenește `Exception`. F
 | `EroareHttp` | Alt status HTTP neașteptat, inclusiv redirecturi | `status` |
 | `EroareRetea` | Fără răspuns sau timeout | `timeout`, `neajunsa` |
 | `EroareRaspunsInvalid` | Răspuns cu formă neașteptată | `raspuns` |
-| `EroareVerificare` | Sursa oficială nu a putut fi interogată | |
+| `EroareVerificare` | Sursa nu a răspuns (`VERIFICARE_ESUATA`) sau a refuzat datele (`serie_talon_invalida`, `vin_invalid`, `numar_invalid`) | `cod` |
 | `EroareTimeoutVerificare` | `asteapta()` a depășit `timeout_ms` | |
 | `EroareWebhook` | Cheie greșită sau payload invalid | `cod` |
 
@@ -530,6 +545,14 @@ Instalezi pachetul cu `pip install verificrca`, creezi un client cu cheia API ș
 ### Pot verifica ITP-ul după numărul de înmatriculare?
 
 Nu. RAR caută inspecția tehnică periodică doar după seria de șasiu (VIN), așa că SDK-ul respinge cererea înainte să plece, fără să consume din cotă. VIN-ul îl găsești în talon, la rubrica E.
+
+### Unde găsesc numărul certificatului de înmatriculare?
+
+E tipărit jos pe talon (certificatul de înmatriculare), la „Numărul certificatului”, și arată ca `I00639603F`. Îl trimiți în `serie_talon` la verificarea rovinietei sau la `vehicule.adauga()`. Spațiile și cratimele sunt eliminate automat. Dacă sursa oficială îl respinge, primești `EroareVerificare` cu `cod` `serie_talon_invalida`, iar la vehiculele din flotă `serie_talon_respinsa` devine `True`.
+
+### Cum verific rovinieta unei mașini din Python?
+
+Apelezi `vrca.verificari.verifica_si_asteapta(tip="rovinieta", query="B123ABC", serie_sasiu="WVWZZZ1JZXW000001", serie_talon="I00639603F")`. Primești statusul și data până la care e plătită rovinieta, din CNAIR. Pentru o verificare manuală, fără cod, folosește pagina [verificare rovinietă](https://www.verificrca.ro/verificare-rovinieta).
 
 ### De unde vin datele?
 

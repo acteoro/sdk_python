@@ -52,6 +52,14 @@ def test_vehicul_din_json_camel() -> None:
     assert not hasattr(v, "camp_nou")
 
 
+def test_vehicul_serie_talon() -> None:
+    v = Vehicul.model_validate({**VEHICUL, "serieTalon": "I00639603F", "serieTalonRespinsa": True})
+    assert (v.serie_talon, v.serie_talon_respinsa) == ("I00639603F", True)
+    # un server fara campurile noi nu strica decodarea
+    vechi = Vehicul.model_validate(VEHICUL)
+    assert (vechi.serie_talon, vechi.serie_talon_respinsa) == (None, False)
+
+
 def test_modelele_sunt_imuabile() -> None:
     v = Vehicul.model_validate(VEHICUL)
     with pytest.raises(ValidationError):

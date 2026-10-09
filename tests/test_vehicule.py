@@ -62,6 +62,25 @@ def test_adauga_normalizeaza_si_trimite_camel() -> None:
     }
 
 
+def test_adauga_cu_serie_talon() -> None:
+    server = ServerFals(
+        json_raspuns(201, {"vehicul": {**VEHICUL, "serieTalon": "I00639603F", "serieTalonRespinsa": False}})
+    )
+    v = client(server).vehicule.adauga(
+        numar_inmatriculare="B123ABC", serie_sasiu="WVWZZZ1JZXW000001", serie_talon="i00639603f"
+    )
+    assert (v.serie_talon, v.serie_talon_respinsa) == ("I00639603F", False)
+    assert json.loads(server.cereri[0].content)["serieTalon"] == "I00639603F"
+
+
+def test_adauga_serie_talon_invalida_fara_cerere() -> None:
+    server = ServerFals()
+    with pytest.raises(EroareValidare) as info:
+        client(server).vehicule.adauga(numar_inmatriculare="B123ABC", serie_talon="ABCDEF")
+    assert info.value.camp == "serie_talon"
+    assert server.cereri == []
+
+
 def test_adauga_validare_locala() -> None:
     server = ServerFals()
     with pytest.raises(EroareValidare):

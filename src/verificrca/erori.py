@@ -149,7 +149,12 @@ class EroareRaspunsInvalid(VerificRcaError):
 
 
 class EroareVerificare(VerificRcaError):
-    """Sursa oficiala nu a putut fi interogata (`status: error`). Verificarea poate fi reluata."""
+    """Verificarea s-a incheiat cu `status: error`. `cod` spune de ce.
+
+    - `VERIFICARE_ESUATA`: sursa oficiala nu a raspuns in timp util; reia cu un `porneste()` nou;
+    - `serie_talon_invalida`, `vin_invalid`, `numar_invalid`: sursa a refuzat datele trimise.
+      O reincercare cu aceleasi date nu ajuta; corecteaza campul respectiv.
+    """
 
 
 class EroareTimeoutVerificare(VerificRcaError):
