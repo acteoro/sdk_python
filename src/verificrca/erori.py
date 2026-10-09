@@ -149,12 +149,26 @@ class EroareRaspunsInvalid(VerificRcaError):
 
 
 class EroareVerificare(VerificRcaError):
-    """Verificarea s-a incheiat cu `status: error`. `cod` spune de ce.
+    """Verificarea s-a incheiat cu `status: error`. `cod` e mereu `VERIFICARE_ESUATA`.
 
-    - `VERIFICARE_ESUATA`: sursa oficiala nu a raspuns in timp util; reia cu un `porneste()` nou;
-    - `serie_talon_invalida`, `vin_invalid`, `numar_invalid`: sursa a refuzat datele trimise.
-      O reincercare cu aceleasi date nu ajuta; corecteaza campul respectiv.
+    `cod_sursa` spune de ce, cand sursa oficiala a refuzat datele trimise:
+    `serie_talon_invalida`, `vin_invalid` sau `numar_invalid`. Atunci o reincercare cu aceleasi
+    date nu ajuta; corecteaza campul respectiv. Cand `cod_sursa` e `None`, sursa nu a raspuns
+    in timp util si verificarea poate fi reluata.
     """
+
+    def __init__(
+        self,
+        mesaj: str,
+        *,
+        status: int | None = None,
+        cod: str | None = None,
+        hint: str | None = None,
+        raspuns: object = None,
+        cod_sursa: str | None = None,
+    ) -> None:
+        super().__init__(mesaj, status=status, cod=cod, hint=hint, raspuns=raspuns)
+        self.cod_sursa = cod_sursa
 
 
 class EroareTimeoutVerificare(VerificRcaError):

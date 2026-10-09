@@ -112,6 +112,7 @@ def test_status_error() -> None:
         "Reincearca.",
         corp,
     )
+    assert info.value.cod_sursa is None
 
 
 @pytest.mark.parametrize("cod", ["serie_talon_invalida", "vin_invalid", "numar_invalid"])
@@ -125,7 +126,7 @@ def test_status_error_cu_cod_de_date_respinse(cod: str) -> None:
     }
     with pytest.raises(EroareVerificare) as info:
         interpreteaza(raspuns(corp), VIN, None, ACUM)
-    assert info.value.cod == cod
+    assert (info.value.cod, info.value.cod_sursa) == ("VERIFICARE_ESUATA", cod)
 
 
 @pytest.mark.parametrize("corp", [[1], "text", None, {"status": "processing", "tip": "casco", "query": "x"}])

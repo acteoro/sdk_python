@@ -183,7 +183,7 @@ Rezultatul final (`VerificareFinala`) are `status` de tip `StatusDocument`:
 | `StatusDocument.EXPIRED` (`"expired"`) | Expirat sau inexistent, confirmat de sursă | data expirării sau `None` |
 | `StatusDocument.NOT_FOUND` (`"not_found"`) | Sursa nu a găsit vehiculul | `None` |
 
-O verificare încă în curs e un obiect `VerificareInCurs`, nu un rezultat. Le deosebești cu `isinstance()`. Când sursa oficială nu răspunde, SDK-ul aruncă `EroareVerificare` cu `cod` `VERIFICARE_ESUATA` și poți relua cererea. Când sursa refuză datele trimise, `cod` spune care câmp e greșit: `serie_talon_invalida`, `vin_invalid` sau `numar_invalid`. În cazul ăsta o reluare cu aceleași date nu ajută, corectează întâi câmpul.
+O verificare încă în curs e un obiect `VerificareInCurs`, nu un rezultat. Le deosebești cu `isinstance()`. Când sursa oficială nu răspunde, SDK-ul aruncă `EroareVerificare` cu `cod` `VERIFICARE_ESUATA` și poți relua cererea. Când sursa refuză datele trimise, `cod` rămâne `VERIFICARE_ESUATA`, iar atributul `cod_sursa` spune care câmp e greșit: `serie_talon_invalida`, `vin_invalid` sau `numar_invalid`. În cazul ăsta o reluare cu aceleași date nu ajută, corectează întâi câmpul.
 
 ## Referință API
 
@@ -449,7 +449,7 @@ Toate excepțiile moștenesc `VerificRcaError`, care moștenește `Exception`. F
 | `EroareHttp` | Alt status HTTP neașteptat, inclusiv redirecturi | `status` |
 | `EroareRetea` | Fără răspuns sau timeout | `timeout`, `neajunsa` |
 | `EroareRaspunsInvalid` | Răspuns cu formă neașteptată | `raspuns` |
-| `EroareVerificare` | Sursa nu a răspuns (`VERIFICARE_ESUATA`) sau a refuzat datele (`serie_talon_invalida`, `vin_invalid`, `numar_invalid`) | `cod` |
+| `EroareVerificare` | Sursa nu a răspuns sau a refuzat datele trimise; `cod` e mereu `VERIFICARE_ESUATA` | `cod_sursa`: `serie_talon_invalida`, `vin_invalid`, `numar_invalid` sau `None` |
 | `EroareTimeoutVerificare` | `asteapta()` a depășit `timeout_ms` | |
 | `EroareWebhook` | Cheie greșită sau payload invalid | `cod` |
 
@@ -548,7 +548,7 @@ Nu. RAR caută inspecția tehnică periodică doar după seria de șasiu (VIN), 
 
 ### Unde găsesc numărul certificatului de înmatriculare?
 
-E tipărit jos pe talon (certificatul de înmatriculare), la „Numărul certificatului”, și arată ca `I00639603F`. Îl trimiți în `serie_talon` la verificarea rovinietei sau la `vehicule.adauga()`. Spațiile și cratimele sunt eliminate automat. Dacă sursa oficială îl respinge, primești `EroareVerificare` cu `cod` `serie_talon_invalida`, iar la vehiculele din flotă `serie_talon_respinsa` devine `True`.
+E tipărit jos pe talon (certificatul de înmatriculare), la „Numărul certificatului”, și arată ca `I00639603F`. Îl trimiți în `serie_talon` la verificarea rovinietei sau la `vehicule.adauga()`. Spațiile și cratimele sunt eliminate automat. Dacă sursa oficială îl respinge, primești `EroareVerificare` cu `cod_sursa` `serie_talon_invalida`, iar la vehiculele din flotă `serie_talon_respinsa` devine `True`.
 
 ### Cum verific rovinieta unei mașini din Python?
 

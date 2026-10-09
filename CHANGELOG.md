@@ -7,7 +7,7 @@ Toate schimbările importante ale pachetului `verificrca` sunt notate aici.
 - Verificarea rovinietei cere și numărul certificatului de înmatriculare (talon), în noul argument `serie_talon` al metodelor `porneste` și `verifica_si_asteapta`. Lipsa lui sau o formă invalidă (6-20 litere și cifre, cel puțin o cifră) oprește cererea local, fără să consume din cotă. La celelalte verificări `serie_talon` e ignorat.
 - `vehicule.adauga` acceptă opțional `serie_talon`.
 - `Vehicul` are câmpurile noi `serie_talon` și `serie_talon_respinsa`.
-- `EroareVerificare.cod` spune de ce s-a încheiat verificarea cu eroare: `VERIFICARE_ESUATA` când sursa nu a răspuns, sau `serie_talon_invalida`, `vin_invalid`, `numar_invalid` când sursa a refuzat datele trimise.
+- `EroareVerificare` are atributul nou `cod_sursa`: `serie_talon_invalida`, `vin_invalid` sau `numar_invalid` când sursa a refuzat datele trimise, `None` când sursa nu a răspuns. `cod` rămâne `VERIFICARE_ESUATA`, ca înainte.
 - Utilitare noi: `este_serie_talon_valida` și `normalizeaza_serie_talon`.
 
 ## [0.1.0] - 2026-09-29

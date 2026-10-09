@@ -107,8 +107,10 @@ def interpreteaza(
     status = r.corp.get("status") if isinstance(r.corp, dict) else None
     if status == "error":
         esuat = decodeaza(_CorpEsuat, r)
-        # `cod` vine doar cand sursa a refuzat datele trimise; atunci o reincercare nu ajuta.
-        raise EroareVerificare(esuat.error, cod=esuat.cod or COD_VERIFICARE_ESUATA, hint=esuat.hint, raspuns=r.corp)
+        # `cod` din raspuns vine doar cand sursa a refuzat datele; il expunem ca `cod_sursa`.
+        raise EroareVerificare(
+            esuat.error, cod=COD_VERIFICARE_ESUATA, hint=esuat.hint, raspuns=r.corp, cod_sursa=esuat.cod
+        )
     if status == "processing":
         c = decodeaza(_CorpInCurs, r)
         since = since_din_poll_url(c.poll_url)

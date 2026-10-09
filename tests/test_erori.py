@@ -66,6 +66,8 @@ def test_campuri_specifice() -> None:
     retea = EroareRetea("m", timeout=True, neajunsa=True)
     assert (retea.timeout, retea.neajunsa) == (True, True)
     assert (EroareRetea("m").timeout, EroareRetea("m").neajunsa) == (False, False)
+    assert EroareVerificare("m", cod_sursa="vin_invalid").cod_sursa == "vin_invalid"
+    assert EroareVerificare("m").cod_sursa is None
 
 
 @pytest.mark.parametrize(
@@ -74,6 +76,7 @@ def test_campuri_specifice() -> None:
         EroareLimita("cota", status=429, cod="COTA_ATINSA", retry_after_ms=1000, utilizare_zi="3/3"),
         EroareRetea("retea", timeout=True, neajunsa=False),
         EroareValidare("tip", camp="tip", acceptate=["rca", "itp"]),
+        EroareVerificare("refuzat", cod="VERIFICARE_ESUATA", cod_sursa="serie_talon_invalida"),
     ],
 )
 def test_erorile_trec_prin_pickle(eroare: VerificRcaError) -> None:

@@ -8,6 +8,7 @@ from verificrca import (
     AsyncVerificRca,
     EroareTimeoutVerificare,
     EroareValidare,
+    EroareVerificare,
     ReferintaVerificare,
     StatusDocument,
     VerificareInCurs,
@@ -59,6 +60,16 @@ async def test_rovinieta_cu_serie_talon() -> None:
     assert json.loads(server.cereri[0].content)["serieTalon"] == "I00639603F"
     with pytest.raises(EroareValidare):
         await client(ServerFals()).verificari.porneste(tip="rovinieta", query="B123ABC", serie_sasiu=vin)
+
+
+async def test_status_error_cu_cod_sursa() -> None:
+    corp = {"tip": "rovinieta", "query": "B123ABC", "status": "error", "error": "Refuzat.", "cod": "numar_invalid"}
+    server = ServerFals(json_raspuns(200, corp))
+    with pytest.raises(EroareVerificare) as info:
+        await client(server).verificari.porneste(
+            tip="rovinieta", query="B123ABC", serie_sasiu="WVWZZZ1JZXW000001", serie_talon="I00639603F"
+        )
+    assert (info.value.cod, info.value.cod_sursa) == ("VERIFICARE_ESUATA", "numar_invalid")
 
 
 async def test_validare_locala() -> None:
