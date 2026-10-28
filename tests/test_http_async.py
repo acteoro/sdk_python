@@ -1,10 +1,10 @@
 import httpx
 import pytest
 
+from acteo import EroareRetea, EroareServer, EroareTimeoutVerificare, SetariRetry
+from acteo._intern.cereri import CerereHttp
+from acteo._intern.http_async import HttpAsync
 from tests.conftest import CeasFalsAsync, ServerFals, json_raspuns, setari_test
-from verificrca import EroareRetea, EroareServer, EroareTimeoutVerificare, SetariRetry
-from verificrca._intern.cereri import CerereHttp
-from verificrca._intern.http_async import HttpAsync
 
 pytestmark = pytest.mark.anyio
 

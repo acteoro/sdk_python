@@ -1,15 +1,18 @@
+import json
+
 import httpx
 import pytest
 
-from tests.conftest import CHEIE, CeasFalsAsync, ServerFals, json_raspuns
-from verificrca import (
+from acteo import (
     AsyncVerificRca,
     EroareTimeoutVerificare,
     EroareValidare,
+    EroareVerificare,
     ReferintaVerificare,
     StatusDocument,
     VerificareInCurs,
 )
+from tests.conftest import CHEIE, CeasFalsAsync, ServerFals, json_raspuns
 
 pytestmark = pytest.mark.anyio
 
@@ -44,6 +47,29 @@ async def test_porneste_intoarce_in_curs() -> None:
     server = ServerFals(json_raspuns(202, IN_CURS))
     r = await client(server).verificari.porneste(tip="itp", query="WVWZZZ1JZXW000001")
     assert isinstance(r, VerificareInCurs)
+
+
+async def test_rovinieta_cu_serie_talon() -> None:
+    vin = "WVWZZZ1JZXW000001"
+    rov = {**FINAL, "tip": "rovinieta", "query": "B123ABC", "numarInmatriculare": "B123ABC", "status": "valid"}
+    server = ServerFals(json_raspuns(200, rov))
+    r = await client(server).verificari.verifica_si_asteapta(
+        tip="rovinieta", query="B123ABC", serie_sasiu=vin, serie_talon="I00639603F"
+    )
+    assert r.status is StatusDocument.VALID
+    assert json.loads(server.cereri[0].content)["serieTalon"] == "I00639603F"
+    with pytest.raises(EroareValidare):
+        await client(ServerFals()).verificari.porneste(tip="rovinieta", query="B123ABC", serie_sasiu=vin)
+
+
+async def test_status_error_cu_cod_sursa() -> None:
+    corp = {"tip": "rovinieta", "query": "B123ABC", "status": "error", "error": "Refuzat.", "cod": "numar_invalid"}
+    server = ServerFals(json_raspuns(200, corp))
+    with pytest.raises(EroareVerificare) as info:
+        await client(server).verificari.porneste(
+            tip="rovinieta", query="B123ABC", serie_sasiu="WVWZZZ1JZXW000001", serie_talon="I00639603F"
+        )
+    assert (info.value.cod, info.value.cod_sursa) == ("VERIFICARE_ESUATA", "numar_invalid")
 
 
 async def test_validare_locala() -> None:

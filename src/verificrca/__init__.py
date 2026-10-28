@@ -1,10 +1,20 @@
-"""SDK Python oficial pentru API-ul verificrca.ro: verificare RCA, ITP, rovinieta si ARR."""
+"""Numele vechi al pachetului `acteo`, pastrat ca `import verificrca` sa mearga in continuare.
 
-from ._intern.setari import SetariRetry
-from ._versiune import URL_IMPLICIT, VERSIUNE_SDK, __version__
-from .client import ClientVehicule, ClientVerificari, VerificRca
-from .client_async import AsyncClientVehicule, AsyncClientVerificari, AsyncVerificRca
-from .erori import (
+Toate numele sunt aceleasi obiecte ca in `acteo` (deci `isinstance` si `except` merg pe oricare).
+`URL_IMPLICIT` ramane adresa clientilor legacy. Pentru cod nou: `from acteo import Acteo`.
+"""
+
+from acteo import (
+    HEADER_CHEIE,
+    HEADER_EVENIMENT,
+    TIPURI_VERIFICARE,
+    VERSIUNE_SDK,
+    AsyncClientVehicule,
+    AsyncClientVerificari,
+    AsyncVerificRca,
+    ClientVehicule,
+    ClientVerificari,
+    Cota,
     EroareAutentificare,
     EroareConfigurare,
     EroareConflict,
@@ -20,23 +30,31 @@ from .erori import (
     EroareValidare,
     EroareVerificare,
     EroareWebhook,
-    VerificRcaError,
-)
-from .modele import (
-    Cota,
     Limite,
     ReferintaVerificare,
+    SetariRetry,
+    StatusDocument,
+    StatusWebhook,
+    TipVerificare,
     Vehicul,
     VehiculWebhook,
     VerificareFinala,
     VerificareInCurs,
+    VerificRca,
+    VerificRcaError,
     WebhookDocumentExpira,
     WebhookRezultat,
     WebhookTest,
+    __version__,
+    este_numar_inmatriculare_valid,
+    este_serie_talon_valida,
+    este_vin_valid,
+    normalizeaza,
+    normalizeaza_serie_talon,
+    parseaza_webhook_rezultat,
+    verifica_webhook_notificare,
 )
-from .tipuri import StatusDocument, StatusWebhook, TipVerificare
-from .validare import TIPURI_VERIFICARE, este_numar_inmatriculare_valid, este_vin_valid, normalizeaza
-from .webhooks import HEADER_CHEIE, HEADER_EVENIMENT, parseaza_webhook_rezultat, verifica_webhook_notificare
+from acteo import URL_IMPLICIT_LEGACY as URL_IMPLICIT
 
 __all__ = [
     "HEADER_CHEIE",
@@ -82,8 +100,10 @@ __all__ = [
     "WebhookTest",
     "__version__",
     "este_numar_inmatriculare_valid",
+    "este_serie_talon_valida",
     "este_vin_valid",
     "normalizeaza",
+    "normalizeaza_serie_talon",
     "parseaza_webhook_rezultat",
     "verifica_webhook_notificare",
 ]

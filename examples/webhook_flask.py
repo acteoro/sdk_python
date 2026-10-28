@@ -4,15 +4,16 @@ import os
 
 from flask import Flask, jsonify, request
 
-from verificrca import EroareWebhook, WebhookDocumentExpira, verifica_webhook_notificare
+from acteo import Acteo, EroareWebhook, WebhookDocumentExpira
 
 app = Flask(__name__)
+acteo = Acteo()  # cheia API din ACTEO_API_KEY; webhook-urile nu fac cereri pe retea
 
 
-@app.post("/webhooks/verificrca")
+@app.post("/webhooks/acteo")
 def notificare():  # type: ignore[no-untyped-def]
     try:
-        ev = verifica_webhook_notificare(request.get_data(), request.headers, os.environ["VERIFICRCA_WEBHOOK_KEY"])
+        ev = acteo.webhooks.verifica_notificare(request.get_data(), request.headers, os.environ["ACTEO_WEBHOOK_KEY"])
     except EroareWebhook as e:
         return jsonify(error=e.cod), 400
     if isinstance(ev, WebhookDocumentExpira):

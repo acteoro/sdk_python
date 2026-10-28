@@ -4,17 +4,18 @@ import os
 
 from fastapi import FastAPI, HTTPException, Request
 
-from verificrca import EroareWebhook, WebhookDocumentExpira, parseaza_webhook_rezultat, verifica_webhook_notificare
+from acteo import Acteo, EroareWebhook, WebhookDocumentExpira
 
 app = FastAPI()
-CHEIE_WEBHOOK = os.environ["VERIFICRCA_WEBHOOK_KEY"]
+acteo = Acteo()  # cheia API din ACTEO_API_KEY; webhook-urile nu fac cereri pe retea
+CHEIE_WEBHOOK = os.environ["ACTEO_WEBHOOK_KEY"]
 
 
 # URL-ul de webhook din dashboard: notificarile de expirare.
-@app.post("/webhooks/verificrca")
+@app.post("/webhooks/acteo")
 async def notificare(request: Request) -> dict[str, bool]:
     try:
-        ev = verifica_webhook_notificare(await request.body(), request.headers, CHEIE_WEBHOOK)
+        ev = acteo.webhooks.verifica_notificare(await request.body(), request.headers, CHEIE_WEBHOOK)
     except EroareWebhook as e:
         raise HTTPException(status_code=401 if e.cod in ("CHEIE_INVALIDA", "CHEIE_NECONFIGURATA") else 400) from e
     if isinstance(ev, WebhookDocumentExpira):
@@ -23,8 +24,8 @@ async def notificare(request: Request) -> dict[str, bool]:
 
 
 # callback_url trimis la porneste(): HTTPS, cu un token secret in cale.
-@app.post("/webhooks/verificrca/rezultat/9f3k2x")
+@app.post("/webhooks/acteo/rezultat/9f3k2x")
 async def rezultat(request: Request) -> dict[str, bool]:
-    r = parseaza_webhook_rezultat(await request.body())
+    r = acteo.webhooks.parseaza_rezultat(await request.body())
     print(r.request_id, r.status.value, r.result.expires_at if r.result else r.error)
     return {"ok": True}

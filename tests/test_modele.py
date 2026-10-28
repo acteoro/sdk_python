@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 import pytest
 from pydantic import ValidationError
 
-from verificrca import (
+from acteo import (
     Limite,
     StatusDocument,
     TipVerificare,
@@ -11,8 +11,8 @@ from verificrca import (
     VerificareFinala,
     VerificareInCurs,
 )
-from verificrca._intern.decodare import cale_eroare
-from verificrca.modele import Baza
+from acteo._intern.decodare import cale_eroare
+from acteo.modele import Baza
 
 VEHICUL = {
     "id": "veh_1",
@@ -50,6 +50,14 @@ def test_vehicul_din_json_camel() -> None:
     assert v.created_at.utcoffset() is not None
     assert v.activ is True
     assert not hasattr(v, "camp_nou")
+
+
+def test_vehicul_serie_talon() -> None:
+    v = Vehicul.model_validate({**VEHICUL, "serieTalon": "I00639603F", "serieTalonRespinsa": True})
+    assert (v.serie_talon, v.serie_talon_respinsa) == ("I00639603F", True)
+    # un server fara campurile noi nu strica decodarea
+    vechi = Vehicul.model_validate(VEHICUL)
+    assert (vechi.serie_talon, vechi.serie_talon_respinsa) == (None, False)
 
 
 def test_modelele_sunt_imuabile() -> None:

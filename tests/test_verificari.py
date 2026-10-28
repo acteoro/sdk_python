@@ -3,8 +3,7 @@ import json
 import httpx
 import pytest
 
-from tests.conftest import CHEIE, CeasFals, ServerFals, json_raspuns
-from verificrca import (
+from acteo import (
     EroareRaspunsInvalid,
     EroareServer,
     EroareTimeoutVerificare,
@@ -17,8 +16,9 @@ from verificrca import (
     VerificareInCurs,
     VerificRca,
 )
-from verificrca._intern.raspunsuri import Raspuns
-from verificrca._intern.verificari import interpreteaza, limite_din, since_din_poll_url
+from acteo._intern.raspunsuri import Raspuns
+from acteo._intern.verificari import interpreteaza, limite_din, since_din_poll_url
+from tests.conftest import CHEIE, CeasFals, ServerFals, json_raspuns
 
 VIN = "WVWZZZ1JZXW000001"
 ACUM = 1_700_000_000_000
@@ -112,6 +112,21 @@ def test_status_error() -> None:
         "Reincearca.",
         corp,
     )
+    assert info.value.cod_sursa is None
+
+
+@pytest.mark.parametrize("cod", ["serie_talon_invalida", "vin_invalid", "numar_invalid"])
+def test_status_error_cu_cod_de_date_respinse(cod: str) -> None:
+    corp = {
+        "tip": "rovinieta",
+        "query": "B123ABC",
+        "status": "error",
+        "error": "Sursa a respins datele trimise.",
+        "cod": cod,
+    }
+    with pytest.raises(EroareVerificare) as info:
+        interpreteaza(raspuns(corp), VIN, None, ACUM)
+    assert (info.value.cod, info.value.cod_sursa) == ("VERIFICARE_ESUATA", cod)
 
 
 @pytest.mark.parametrize("corp", [[1], "text", None, {"status": "processing", "tip": "casco", "query": "x"}])
@@ -140,6 +155,34 @@ def test_porneste_trimite_post_normalizat() -> None:
         "serieSasiu": VIN,
         "callbackUrl": "https://example.com/wh/9f3k",
     }
+
+
+def test_porneste_rovinieta_trimite_serie_talon() -> None:
+    server = ServerFals(json_raspuns(202, {**IN_CURS, "tip": "rovinieta"}))
+    r = client(server).verificari.porneste(
+        tip="rovinieta", query="B123ABC", serie_sasiu=VIN, serie_talon="i 00639603 f"
+    )
+    assert isinstance(r, VerificareInCurs)
+    assert json.loads(server.cereri[0].content) == {
+        "tip": "rovinieta",
+        "query": "B123ABC",
+        "serieSasiu": VIN,
+        "serieTalon": "I00639603F",
+    }
+
+
+def test_porneste_rovinieta_fara_serie_talon_nu_trimite_cerere() -> None:
+    server = ServerFals()
+    with pytest.raises(EroareValidare) as info:
+        client(server).verificari.porneste(tip="rovinieta", query="B123ABC", serie_sasiu=VIN)
+    assert info.value.camp == "serie_talon"
+    assert server.cereri == []
+
+
+def test_porneste_serie_talon_netrimisa_la_rca() -> None:
+    server = ServerFals(json_raspuns(200, FINAL))
+    client(server).verificari.porneste(tip="rca", query="B123ABC", serie_talon="I00639603F")
+    assert "serieTalon" not in json.loads(server.cereri[0].content)
 
 
 def test_porneste_validare_locala_fara_cerere() -> None:

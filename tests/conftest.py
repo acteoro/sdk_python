@@ -8,7 +8,7 @@ from typing import Any
 import httpx
 import pytest
 
-from verificrca._intern.setari import Setari, SetariRetry, construieste_setari
+from acteo._intern.setari import Setari, SetariRetry, construieste_setari
 
 CHEIE = "vrca_test_0123456789abcdef"
 BASE = "https://api.example.com"

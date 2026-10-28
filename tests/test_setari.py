@@ -1,7 +1,7 @@
 import pytest
 
+from acteo import VERSIUNE_SDK, EroareConfigurare, SetariRetry
 from tests.conftest import CHEIE, setari_test
-from verificrca import VERSIUNE_SDK, EroareConfigurare, SetariRetry
 
 
 def test_implicite() -> None:

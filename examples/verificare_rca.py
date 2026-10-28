@@ -1,17 +1,18 @@
-"""Verifica RCA-ul unei masini dupa numar.
+"""Verifica RCA-ul unei masini dupa numar si, optional, dupa VIN.
 
-Ruleaza: VERIFICRCA_API_KEY=vrca_... python examples/verificare_rca.py B123ABC
+Ruleaza: ACTEO_API_KEY=... python examples/verificare_rca.py B123ABC [VIN]
 """
 
 import sys
 
-from verificrca import EroareLimita, EroareValidare, VerificRca
+from acteo import Acteo, EroareLimita, EroareValidare
 
 numar = sys.argv[1] if len(sys.argv) > 1 else "B123ABC"
+vin = sys.argv[2] if len(sys.argv) > 2 else None
 
-with VerificRca() as vrca:
+with Acteo() as acteo:
     try:
-        r = vrca.verificari.verifica_si_asteapta(tip="rca", query=numar)
+        r = acteo.auto.rca.verifica(numar=numar, vin=vin)
     except EroareValidare as e:
         sys.exit(f"Date invalide: {e.mesaj}")
     except EroareLimita as e:

@@ -3,24 +3,41 @@
 from __future__ import annotations
 
 import math
-from typing import Literal
+from dataclasses import dataclass
+from typing import Generic, Literal, TypeVar
 from urllib.parse import parse_qs, urlsplit
 
-from pydantic import AwareDatetime
+from pydantic import AwareDatetime, ValidationError
 
-from ..erori import EroareTimeoutVerificare, EroareValidare, EroareVerificare
+from ..erori import EroareRaspunsInvalid, EroareTimeoutVerificare, EroareValidare, EroareVerificare
 from ..modele import Baza, Cota, Limite, ReferintaVerificare, VerificareFinala, VerificareInCurs
 from ..tipuri import TipVerificare
 from ..validare import TintaVerificare
 from .cereri import CerereHttp
+from .decodare import cale_eroare
 from .raspunsuri import Raspuns, decodeaza
 
 CALE = "/api/public/v1/verificare"
 INTERVAL_IMPLICIT_MS = 3_000
 INTERVAL_MINIM_MS = 2_000
 TIMEOUT_IMPLICIT_MS = 300_000
+COD_VERIFICARE_ESUATA = "VERIFICARE_ESUATA"
 
 Referinta = VerificareInCurs | ReferintaVerificare
+
+F = TypeVar("F", bound=VerificareFinala)
+C = TypeVar("C", bound=VerificareInCurs)
+
+
+@dataclass(frozen=True)
+class Modele(Generic[F, C]):
+    """Modelele in care se decodeaza raspunsul: generice (legacy) sau ingustate pe document."""
+
+    final: type[F]
+    in_curs: type[C]
+
+
+MODELE_GENERICE = Modele(VerificareFinala, VerificareInCurs)
 
 
 class _CorpInCurs(Baza):
@@ -38,6 +55,7 @@ class _CorpEsuat(Baza):
     query: str
     status: Literal["error"]
     error: str
+    cod: str | None = None
     hint: str | None = None
 
 
@@ -45,6 +63,8 @@ def cerere_porneste(t: TintaVerificare) -> CerereHttp:
     corp: dict[str, object] = {"tip": t.tip.value, "query": t.query}
     if t.serie_sasiu:
         corp["serieSasiu"] = t.serie_sasiu
+    if t.serie_talon:
+        corp["serieTalon"] = t.serie_talon
     if t.callback_url:
         corp["callbackUrl"] = t.callback_url
     return CerereHttp("POST", CALE, False, corp=corp)
@@ -99,27 +119,41 @@ def since_din_poll_url(poll_url: str | None) -> int | None:
 def interpreteaza(
     r: Raspuns, serie_sasiu: str | None, since_implicit: int | None, acum_ms: int
 ) -> VerificareFinala | VerificareInCurs:
+    return interpreteaza_ca(MODELE_GENERICE, r, serie_sasiu, since_implicit, acum_ms)
+
+
+def interpreteaza_ca(
+    modele: Modele[F, C], r: Raspuns, serie_sasiu: str | None, since_implicit: int | None, acum_ms: int
+) -> F | C:
     limite = limite_din(r)
     status = r.corp.get("status") if isinstance(r.corp, dict) else None
     if status == "error":
         esuat = decodeaza(_CorpEsuat, r)
-        raise EroareVerificare(esuat.error, cod="VERIFICARE_ESUATA", hint=esuat.hint, raspuns=r.corp)
+        # `cod` din raspuns vine doar cand sursa a refuzat datele; il expunem ca `cod_sursa`.
+        raise EroareVerificare(
+            esuat.error, cod=COD_VERIFICARE_ESUATA, hint=esuat.hint, raspuns=r.corp, cod_sursa=esuat.cod
+        )
     if status == "processing":
         c = decodeaza(_CorpInCurs, r)
         since = since_din_poll_url(c.poll_url)
         if since is None:
             since = since_implicit if since_implicit is not None else acum_ms
-        return VerificareInCurs(
-            tip=c.tip,
-            query=c.query,
-            serie_sasiu=serie_sasiu if c.tip is TipVerificare.ROVINIETA else None,
-            since=since,
-            request_id=c.request_id,
-            queued_at=c.queued_at,
-            hint=c.hint,
-            limite=limite,
-        )
-    final = decodeaza(VerificareFinala, r)
+        try:
+            return modele.in_curs(
+                tip=c.tip,
+                query=c.query,
+                serie_sasiu=serie_sasiu if c.tip is TipVerificare.ROVINIETA else None,
+                since=since,
+                request_id=c.request_id,
+                queued_at=c.queued_at,
+                hint=c.hint,
+                limite=limite,
+            )
+        except ValidationError as e:
+            raise EroareRaspunsInvalid(
+                f"Raspunsul API-ului nu are forma asteptata: {cale_eroare(e)}", status=r.status, raspuns=r.corp
+            ) from e
+    final = decodeaza(modele.final, r)
     return final.model_copy(update={"limite": limite}) if limite else final
 
 

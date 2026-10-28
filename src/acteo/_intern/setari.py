@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, fields
 from urllib.parse import urlsplit
 
-from .._versiune import VERSIUNE_SDK
+from .._versiune import URL_IMPLICIT, URL_IMPLICIT_LEGACY, VERSIUNE_SDK
 from ..erori import EroareConfigurare
 
 
@@ -31,6 +31,41 @@ class Setari:
     timeout_ms: float
     retry: SetariRetry | None
     user_agent: str
+
+
+@dataclass(frozen=True)
+class Profil:
+    """Ce difera intre clientul `Acteo` si cel legacy `VerificRca`."""
+
+    url_implicit: str
+    variabile_cheie: tuple[str, ...]
+    """Variabilele de mediu citite pentru cheie, in ordine."""
+    agent: str
+    """Prefixul din `User-Agent`."""
+    unde_cheie: str
+    """Unde se genereaza cheia, aratat cand lipseste."""
+
+
+PROFIL_ACTEO = Profil(
+    url_implicit=URL_IMPLICIT,
+    variabile_cheie=("ACTEO_API_KEY", "VERIFICRCA_API_KEY"),
+    agent="acteo-sdk-python",
+    unde_cheie="https://app.acteo.ro/api/chei",
+)
+PROFIL_LEGACY = Profil(
+    url_implicit=URL_IMPLICIT_LEGACY,
+    variabile_cheie=("VERIFICRCA_API_KEY",),
+    agent="verificrca-sdk-python",
+    unde_cheie="https://www.verificrca.ro/dashboard/api",
+)
+
+
+def _cheie_din_mediu(profil: Profil) -> str:
+    for nume in profil.variabile_cheie:
+        valoare = os.environ.get(nume, "").strip()
+        if valoare:
+            return valoare
+    return ""
 
 
 _CHEI_RETRY = tuple(f.name for f in fields(SetariRetry))
@@ -66,12 +101,13 @@ def construieste_setari(
     timeout_ms: float,
     retry: SetariRetry | Mapping[str, int] | bool | None,
     user_agent: str | None,
+    profil: Profil = PROFIL_LEGACY,
 ) -> Setari:
-    cheie = (api_key if api_key is not None else os.environ.get("VERIFICRCA_API_KEY", "")).strip()
+    cheie = (api_key if api_key is not None else _cheie_din_mediu(profil)).strip()
     if not cheie:
         raise EroareConfigurare(
-            "Lipseste cheia API. Trimite `api_key` sau seteaza variabila de mediu VERIFICRCA_API_KEY.",
-            hint="Cheia se genereaza din https://www.verificrca.ro/dashboard/api",
+            f"Lipseste cheia API. Trimite `api_key` sau seteaza variabila de mediu {profil.variabile_cheie[0]}.",
+            hint=f"Cheia se genereaza din {profil.unde_cheie}",
         )
     if not cheie.isascii() or any(c.isspace() or not c.isprintable() for c in cheie):
         raise EroareConfigurare("Cheia API contine caractere neacceptate (spatii sau caractere non-ASCII).")
@@ -92,5 +128,5 @@ def construieste_setari(
     if user_agent and not (user_agent.isascii() and user_agent.isprintable()):
         raise EroareConfigurare("`user_agent` contine caractere neacceptate (doar ASCII tiparibil).")
 
-    agent = f"verificrca-sdk-python/{VERSIUNE_SDK}" + (f" {user_agent}" if user_agent else "")
+    agent = f"{profil.agent}/{VERSIUNE_SDK}" + (f" {user_agent}" if user_agent else "")
     return Setari(cheie, base_url.rstrip("/"), timeout_ms, _construieste_retry(retry), agent)
