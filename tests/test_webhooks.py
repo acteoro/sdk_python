@@ -4,7 +4,7 @@ from collections.abc import Iterator
 import httpx
 import pytest
 
-from verificrca import (
+from acteo import (
     HEADER_CHEIE,
     EroareWebhook,
     StatusWebhook,

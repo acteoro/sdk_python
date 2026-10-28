@@ -2,8 +2,7 @@ import json
 
 import pytest
 
-from tests.conftest import CHEIE, setari_test
-from verificrca import (
+from acteo import (
     EroareAutentificare,
     EroareConflict,
     EroareHttp,
@@ -16,14 +15,15 @@ from verificrca import (
     EroareValidare,
     Vehicul,
 )
-from verificrca._intern.cereri import CerereHttp, pregateste
-from verificrca._intern.raspunsuri import (
+from acteo._intern.cereri import CerereHttp, pregateste
+from acteo._intern.raspunsuri import (
     Raspuns,
     citeste_retry_after,
     construieste_raspuns,
     decodeaza,
     eroare_din_raspuns,
 )
+from tests.conftest import CHEIE, setari_test
 
 ACUM = 1_700_000_000_000
 

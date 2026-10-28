@@ -3,8 +3,7 @@ import json
 import httpx
 import pytest
 
-from tests.conftest import CHEIE, CeasFals, ServerFals, json_raspuns
-from verificrca import (
+from acteo import (
     EroareRaspunsInvalid,
     EroareServer,
     EroareTimeoutVerificare,
@@ -17,8 +16,9 @@ from verificrca import (
     VerificareInCurs,
     VerificRca,
 )
-from verificrca._intern.raspunsuri import Raspuns
-from verificrca._intern.verificari import interpreteaza, limite_din, since_din_poll_url
+from acteo._intern.raspunsuri import Raspuns
+from acteo._intern.verificari import interpreteaza, limite_din, since_din_poll_url
+from tests.conftest import CHEIE, CeasFals, ServerFals, json_raspuns
 
 VIN = "WVWZZZ1JZXW000001"
 ACUM = 1_700_000_000_000

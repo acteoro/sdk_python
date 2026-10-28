@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 import pytest
 from pydantic import ValidationError
 
-from verificrca import (
+from acteo import (
     Limite,
     StatusDocument,
     TipVerificare,
@@ -11,8 +11,8 @@ from verificrca import (
     VerificareFinala,
     VerificareInCurs,
 )
-from verificrca._intern.decodare import cale_eroare
-from verificrca.modele import Baza
+from acteo._intern.decodare import cale_eroare
+from acteo.modele import Baza
 
 VEHICUL = {
     "id": "veh_1",

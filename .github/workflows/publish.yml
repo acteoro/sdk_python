@@ -22,7 +22,7 @@ jobs:
 
       - name: Tag-ul trebuie sa corespunda versiunii din _versiune.py
         run: |
-          VERSIUNE="v$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' src/verificrca/_versiune.py)"
+          VERSIUNE="v$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' src/acteo/_versiune.py)"
           if [ "$VERSIUNE" != "$GITHUB_REF_NAME" ]; then
             echo "Tag $GITHUB_REF_NAME diferit de versiunea din _versiune.py ($VERSIUNE)"
             exit 1

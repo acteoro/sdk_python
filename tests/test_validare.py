@@ -1,6 +1,6 @@
 import pytest
 
-from verificrca import (
+from acteo import (
     TIPURI_VERIFICARE,
     EroareValidare,
     TipVerificare,
@@ -10,7 +10,7 @@ from verificrca import (
     normalizeaza,
     normalizeaza_serie_talon,
 )
-from verificrca.validare import TintaVerificare, valideaza_cerere_verificare, valideaza_vehicul_nou
+from acteo.validare import TintaVerificare, valideaza_cerere_verificare, valideaza_vehicul_nou
 
 VIN = "WVWZZZ1JZXW000001"
 TALON = "I00639603F"

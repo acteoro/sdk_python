@@ -3,16 +3,16 @@ requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
-name = "verificrca"
+name = "acteo"
 dynamic = ["version"]
-description = "SDK Python oficial pentru API-ul verificrca.ro: verificare RCA, ITP, rovinieta si ARR, monitorizarea flotei si webhook-uri de expirare."
+description = "SDK Python oficial pentru API-ul public Acteo: verificare RCA, ITP, rovinieta si copie conforma ARR dupa numar de inmatriculare sau serie de sasiu (VIN), monitorizarea flotei si webhook-uri de expirare."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.10"
-authors = [{ name = "verificrca", email = "contact@verificrca.ro" }]
+authors = [{ name = "Acteo.ro", email = "contact@acteo.ro" }]
 keywords = [
-    "verificrca", "verificare rca", "verificare itp", "verificare rovinieta", "verificare arr",
+    "acteo", "verificrca", "verificare rca", "verificare itp", "verificare rovinieta", "verificare arr",
     "rca", "itp", "rovinieta", "copie conforma arr", "asigurare auto", "flota auto", "romania",
     "api", "sdk", "car insurance check", "vehicle inspection", "road tax", "fleet management",
 ]
@@ -35,23 +35,24 @@ classifiers = [
 dependencies = ["httpx>=0.27,<1", "pydantic>=2.6,<3", "anyio>=3.7,<5"]
 
 [project.urls]
-Homepage = "https://www.verificrca.ro/api-acces"
-Documentation = "https://github.com/verificrca/sdk_python#readme"
-Repository = "https://github.com/verificrca/sdk_python"
-Changelog = "https://github.com/verificrca/sdk_python/blob/main/CHANGELOG.md"
-Issues = "https://github.com/verificrca/sdk_python/issues"
+Homepage = "https://acteo.ro/api-acces"
+Documentation = "https://github.com/acteoro/sdk_python#readme"
+Repository = "https://github.com/acteoro/sdk_python"
+Changelog = "https://github.com/acteoro/sdk_python/blob/main/CHANGELOG.md"
+Issues = "https://github.com/acteoro/sdk_python/issues"
 
 [dependency-groups]
 dev = ["pytest>=8", "mypy>=1.11", "ruff>=0.6"]
 
 [tool.hatch.version]
-path = "src/verificrca/_versiune.py"
+path = "src/acteo/_versiune.py"
 
 [tool.hatch.build.targets.sdist]
-include = ["src/verificrca", "README.md", "CHANGELOG.md", "LICENSE", "pyproject.toml"]
+include = ["src/acteo", "src/verificrca", "README.md", "CHANGELOG.md", "LICENSE", "pyproject.toml"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/verificrca"]
+# `verificrca` e numele vechi, pastrat ca alias in aceeasi distributie.
+packages = ["src/acteo", "src/verificrca"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

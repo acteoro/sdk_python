@@ -2,8 +2,7 @@ import json
 
 import pytest
 
-from tests.conftest import CHEIE, CeasFals, CeasFalsAsync, ServerFals, json_raspuns
-from verificrca import (
+from acteo import (
     AsyncVerificRca,
     EroareConflict,
     EroareInterzis,
@@ -13,6 +12,7 @@ from verificrca import (
     EroareValidare,
     VerificRca,
 )
+from tests.conftest import CHEIE, CeasFals, CeasFalsAsync, ServerFals, json_raspuns
 
 VEHICUL = {
     "id": "veh_1",

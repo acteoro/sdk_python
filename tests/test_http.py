@@ -1,8 +1,7 @@
 import httpx
 import pytest
 
-from tests.conftest import CHEIE, CeasFals, ServerFals, json_raspuns, setari_test
-from verificrca import (
+from acteo import (
     EroareConflict,
     EroareHttp,
     EroareLimita,
@@ -11,8 +10,9 @@ from verificrca import (
     EroareTimeoutVerificare,
     SetariRetry,
 )
-from verificrca._intern.cereri import CerereHttp
-from verificrca._intern.http_sync import Http
+from acteo._intern.cereri import CerereHttp
+from acteo._intern.http_sync import Http
+from tests.conftest import CHEIE, CeasFals, ServerFals, json_raspuns, setari_test
 
 GET = CerereHttp("GET", "/api/public/v1/vehicule", True, {"tip": "rca", "gol": None})
 POST = CerereHttp("POST", "/api/public/v1/verificare", False, corp={"tip": "rca", "query": "B123ABC"})

@@ -3,8 +3,7 @@ import json
 import httpx
 import pytest
 
-from tests.conftest import CHEIE, CeasFalsAsync, ServerFals, json_raspuns
-from verificrca import (
+from acteo import (
     AsyncVerificRca,
     EroareTimeoutVerificare,
     EroareValidare,
@@ -13,6 +12,7 @@ from verificrca import (
     StatusDocument,
     VerificareInCurs,
 )
+from tests.conftest import CHEIE, CeasFalsAsync, ServerFals, json_raspuns
 
 pytestmark = pytest.mark.anyio
 

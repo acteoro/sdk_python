@@ -2,7 +2,7 @@ import pickle
 
 import pytest
 
-from verificrca import (
+from acteo import (
     EroareAutentificare,
     EroareConfigurare,
     EroareConflict,

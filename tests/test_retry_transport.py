@@ -1,7 +1,7 @@
 import httpx
 import pytest
 
-from verificrca import (
+from acteo import (
     EroareHttp,
     EroareLimita,
     EroareRetea,
@@ -10,8 +10,8 @@ from verificrca import (
     SetariRetry,
     VerificRcaError,
 )
-from verificrca._intern.retry import pauza_ms, se_poate_reincerca
-from verificrca._intern.transport import eroare_retea
+from acteo._intern.retry import pauza_ms, se_poate_reincerca
+from acteo._intern.transport import eroare_retea
 
 R = SetariRetry(incercari=3, intarziere_initiala_ms=500, intarziere_maxima_ms=10_000)
 
