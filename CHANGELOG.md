@@ -2,7 +2,7 @@
 
 Toate schimbările importante ale pachetului `acteo` (fost `verificrca`) sunt notate aici.
 
-## acteo 0.1.0 (2026-10-28)
+## acteo 0.3.0 (2026-10-29)
 
 Pachetul `verificrca` continuă sub numele `acteo` (`pip install acteo`, `import acteo`), cu apelurile grupate pe domeniu și pe document. Vezi secțiunea „Vii de la verificrca?” din README.
 
