@@ -1,6 +1,18 @@
 # Changelog
 
-Toate schimbările importante ale pachetului `verificrca` sunt notate aici.
+Toate schimbările importante ale pachetului `acteo` (fost `verificrca`) sunt notate aici.
+
+## acteo 0.1.0 (2026-10-28)
+
+Pachetul `verificrca` continuă sub numele `acteo` (`pip install acteo`, `import acteo`), cu apelurile grupate pe domeniu și pe document. Vezi secțiunea „Vii de la verificrca?” din README.
+
+- Clienți noi `Acteo` (sincron) și `AsyncActeo` (asyncio): `acteo.auto.rca`, `acteo.auto.itp`, `acteo.auto.rovinieta` și `acteo.auto.arr`, fiecare cu `verifica`, `porneste`, `rezultat` și `asteapta`. Fiecare document își cere exact identificatorii lui, iar rezultatul are tipul documentului (`RezultatRca`, `VerificareInCursRca` etc., subclase ale `VerificareFinala` și `VerificareInCurs`).
+- La RCA, un text de 17 caractere fără I, O și Q e tratat ca VIN. Cu ambele date: `verifica(numar=..., vin=...)`.
+- `rezultat` și `asteapta` primesc verificarea în curs întoarsă de `porneste` sau direct identificatorul documentului.
+- `acteo.auto.flota` pentru vehiculele din cont și `acteo.webhooks` pentru webhook-uri.
+- Adresa implicită este `https://api.acteo.ro`. Cheia se citește din `ACTEO_API_KEY`, apoi din `VERIFICRCA_API_KEY`.
+- `ActeoError`, clasa de bază a excepțiilor (aceeași cu `VerificRcaError`).
+- `import verificrca` și clienții `VerificRca` și `AsyncVerificRca` funcționează în continuare, cu aceleași obiecte și aceeași adresă implicită.
 
 ## [0.2.0] - 2026-10-09
 
