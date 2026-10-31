@@ -1,6 +1,6 @@
 """Versiunea SDK-ului si adresele implicite ale API-ului."""
 
-__version__ = "0.4.0"
+__version__ = "0.4.1"
 VERSIUNE_SDK = __version__
 URL_IMPLICIT = "https://api.acteo.ro"
 """Adresa implicita a clientilor `Acteo` si `AsyncActeo`."""

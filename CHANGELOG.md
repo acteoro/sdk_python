@@ -2,6 +2,10 @@
 
 Toate schimbările importante ale pachetului `acteo` (fost `verificrca`) sunt notate aici.
 
+## acteo 0.4.1 (2026-10-31)
+
+- Documentație: fiecare verificare interoghează sursa oficială. `porneste()` întoarce o verificare în curs, iar rezultatul vine prin `asteapta()`, `rezultat()` sau webhook. `checked_at` e descris ca momentul verificării. Codul nu se schimbă.
+
 ## acteo 0.4.0 (2026-10-31)
 
 - Corectură: `verifica_notificare()` (și `verifica_webhook_notificare()`) citește cheia din headerul `X-Acteo-Key`, cel trimis acum de API. Până acum căuta doar `X-Verificrca-Key`, așa că notificările reale erau respinse cu `CHEIE_INVALIDA`. Headerul vechi e citit în continuare când lipsește cel nou. `HEADER_CHEIE` e acum `"x-acteo-key"`, iar `HEADER_EVENIMENT` e `"x-acteo-event"`.
