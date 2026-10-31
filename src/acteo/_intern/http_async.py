@@ -12,7 +12,7 @@ from .cereri import CerereHttp, pregateste
 from .raspunsuri import Raspuns, construieste_raspuns
 from .retry import pauza_ms, se_poate_reincerca
 from .setari import Setari
-from .transport import eroare_retea
+from .transport import eroare_retea, timeout_cerere
 
 
 class HttpAsync:
@@ -47,7 +47,15 @@ class HttpAsync:
 
     async def _o_data(self, cerere: CerereHttp) -> Raspuns:
         p = pregateste(self._setari, cerere)
-        req = self._client.build_request(p.metoda, p.url, params=p.params, headers=p.headere, content=p.continut)
+        timeout = timeout_cerere(self._client.timeout, cerere.timeout_minim_ms)
+        req = self._client.build_request(
+            p.metoda,
+            p.url,
+            params=p.params,
+            headers=p.headere,
+            content=p.continut,
+            timeout=httpx.USE_CLIENT_DEFAULT if timeout is None else timeout,
+        )
         try:
             raspuns = await self._client.send(req, follow_redirects=False)
         except httpx.RequestError as exc:

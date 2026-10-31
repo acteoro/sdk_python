@@ -2,6 +2,16 @@
 
 Toate schimbările importante ale pachetului `acteo` (fost `verificrca`) sunt notate aici.
 
+## acteo 0.4.0 (2026-10-31)
+
+- Corectură: `verifica_notificare()` (și `verifica_webhook_notificare()`) citește cheia din headerul `X-Acteo-Key`, cel trimis acum de API. Până acum căuta doar `X-Verificrca-Key`, așa că notificările reale erau respinse cu `CHEIE_INVALIDA`. Headerul vechi e citit în continuare când lipsește cel nou. `HEADER_CHEIE` e acum `"x-acteo-key"`, iar `HEADER_EVENIMENT` e `"x-acteo-event"`.
+- `verifica_notificare()` acceptă și evenimentele celorlalte servicii: `dosar.eveniment`, `dosar.termen`, `firma.schimbare`, `firma.dosar`, `marca.schimbare`, `marca.expira`, `asigurare.schimbare` și `termen.expira`, fiecare cu modelul lui (`WebhookDosarEveniment`, `WebhookTermenExpira` etc.). Tipul `WebhookNotificare` e uniunea tuturor.
+- `acteo.auto.vin.decodeaza(vin)`: decodarea VIN.
+- `acteo.auto.numere.verifica(numar)`: dacă un număr de înmatriculare e liber la DGPCI, cu un timeout de cel puțin 150 de secunde pentru această cerere.
+- `acteo.auto.imagini.obtine()` și `asteapta()`: poza de studio a unei mașini.
+- Aceleași metode pe `AsyncActeo`.
+- Răspunsurile 422 devin `EroareValidare`. `EroareServer` are `retry_after_ms`. Un 503 `OCUPAT` se reîncearcă după `Retry-After`. Un 5xx cu alt cod din partea API-ului nu se mai repetă la POST.
+
 ## acteo 0.3.0 (2026-10-29)
 
 Pachetul `verificrca` continuă sub numele `acteo` (`pip install acteo`, `import acteo`), cu apelurile grupate pe domeniu și pe document. Vezi secțiunea „Vii de la verificrca?” din README.

@@ -176,7 +176,7 @@ async def test_flota_si_webhooks() -> None:
     assert server.cereri[0].url.path == "/api/public/v1/vehicule"
     corp_test = {"event": "webhook.test", "id": "t1", "mesaj": "ok", "trimisLa": "2026-09-29T07:00:00.000Z"}
     ev = acteo.webhooks.verifica_notificare(
-        json.dumps(corp_test), httpx.Headers({"x-verificrca-key": "whsec_0123456789"}), "whsec_0123456789"
+        json.dumps(corp_test), httpx.Headers({"x-acteo-key": "whsec_0123456789"}), "whsec_0123456789"
     )
     assert ev.id == "t1"
 

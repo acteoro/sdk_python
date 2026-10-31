@@ -293,7 +293,7 @@ def test_webhooks_parseaza_rezultat() -> None:
 def test_webhooks_verifica_notificare() -> None:
     corp_test = {"event": "webhook.test", "id": "t1", "mesaj": "ok", "trimisLa": "2026-09-29T07:00:00.000Z"}
     ev = client(ServerFals()).webhooks.verifica_notificare(
-        json.dumps(corp_test), httpx.Headers({"x-verificrca-key": "whsec_0123456789"}), "whsec_0123456789"
+        json.dumps(corp_test), httpx.Headers({"x-acteo-key": "whsec_0123456789"}), "whsec_0123456789"
     )
     assert ev.id == "t1"
 
