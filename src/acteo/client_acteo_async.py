@@ -6,13 +6,17 @@ from collections.abc import Callable, Mapping
 
 import httpx
 
-from ._intern import documente
+from ._intern import documente, produse
 from ._intern.ceas import CeasAsync
+from ._intern.http_async import HttpAsync
 from ._intern.setari import PROFIL_ACTEO, SetariRetry
 from ._intern.verificari import INTERVAL_IMPLICIT_MS, TIMEOUT_IMPLICIT_MS
 from .client_acteo import ClientWebhooks
 from .client_async import AsyncClientVehicule, AsyncClientVerificari, _ClientAsincron
 from .modele import (
+    DecodareVin,
+    ImagineMasina,
+    NumarDisponibil,
     RezultatArr,
     RezultatItp,
     RezultatRca,
@@ -23,6 +27,7 @@ from .modele import (
     VerificareInCursRca,
     VerificareInCursRovinieta,
 )
+from .tipuri import UnghiImagine
 
 
 class AsyncClientRca:
@@ -220,10 +225,75 @@ class AsyncClientArr:
         return await self._v._asteapta(ref, interval_ms, timeout_ms, documente.MODELE_ARR)
 
 
-class AsyncClientAuto:
-    """Domeniul auto: documentele unei masini (RCA, ITP, rovinieta, ARR) si flota din cont."""
+class AsyncClientVin:
+    """Varianta async a `ClientVin`. Decodarea seriei de sasiu (VIN), prin `acteo.auto.vin`."""
 
-    def __init__(self, verificari: AsyncClientVerificari, vehicule: AsyncClientVehicule) -> None:
+    def __init__(self, http: HttpAsync) -> None:
+        self._http = http
+
+    async def decodeaza(self, vin: str) -> DecodareVin:
+        """Decodeaza un VIN: marca, model, an si structura lui. Consuma din cota doar cand e `taxat`."""
+        return produse.interpreteaza_decodare(await self._http.trimite(produse.cerere_decodare_vin(vin)))
+
+
+class AsyncClientNumere:
+    """Varianta async a `ClientNumere`. Numerele disponibile la DGPCI, prin `acteo.auto.numere`."""
+
+    def __init__(self, http: HttpAsync) -> None:
+        self._http = http
+
+    async def verifica(self, numar: str) -> NumarDisponibil:
+        """Verifica la DGPCI daca un numar e liber. Timeout de cel putin 150 de secunde pe cerere."""
+        return produse.interpreteaza_numar(await self._http.trimite(produse.cerere_numar(numar)))
+
+
+class AsyncClientImagini:
+    """Varianta async a `ClientImagini`. Pozele de studio ale masinilor, prin `acteo.auto.imagini`."""
+
+    def __init__(self, http: HttpAsync, ceas: CeasAsync) -> None:
+        self._http = http
+        self._ceas = ceas
+
+    async def obtine(
+        self, *, marca: str, model: str, an: int, unghi: UnghiImagine | None = None, umbra: bool | None = None
+    ) -> ImagineMasina:
+        """Cere poza unei masini si raspunde imediat. Se taxeaza doar cu `status == "gata"`."""
+        cerere = produse.cerere_imagine(marca, model, an, unghi, umbra)
+        return produse.interpreteaza_imagine(await self._http.trimite(cerere), self._ceas.acum_ms())
+
+    async def asteapta(
+        self,
+        *,
+        marca: str,
+        model: str,
+        an: int,
+        unghi: UnghiImagine | None = None,
+        umbra: bool | None = None,
+        timeout_ms: float = produse.TIMEOUT_IMAGINE_MS,
+    ) -> ImagineMasina:
+        """Ca `obtine()`, dar cat timp poza e `"in-lucru"` o cere din nou, cu pauzele din `Retry-After`.
+
+        Peste `timeout_ms` (implicit 2 minute) arunca `EroareTimeoutVerificare`.
+        """
+        timeout_ms = produse.valideaza_timeout_imagine(timeout_ms)
+        cerere = produse.cerere_imagine(marca, model, an, unghi, umbra)
+        termen = self._ceas.monoton_ms() + timeout_ms
+        while True:
+            imagine = produse.interpreteaza_imagine(await self._http.trimite(cerere), self._ceas.acum_ms())
+            if imagine.status != "in-lucru":
+                return imagine
+            pauza = produse.pauza_imagine(imagine)
+            if self._ceas.monoton_ms() + pauza > termen:
+                raise produse.eroare_timeout_imagine(timeout_ms)
+            await self._ceas.dormi_ms(pauza)
+
+
+class AsyncClientAuto:
+    """Domeniul auto: documentele unei masini (RCA, ITP, rovinieta, ARR), flota, VIN, numere si poze."""
+
+    def __init__(
+        self, verificari: AsyncClientVerificari, vehicule: AsyncClientVehicule, http: HttpAsync, ceas: CeasAsync
+    ) -> None:
         self.rca = AsyncClientRca(verificari)
         """Asigurarea RCA: `acteo.auto.rca.verifica("B123ABC")`."""
         self.itp = AsyncClientItp(verificari)
@@ -234,6 +304,12 @@ class AsyncClientAuto:
         """Copia conforma ARR: `acteo.auto.arr.verifica("B123ABC")`."""
         self.flota = vehicule
         """Vehiculele monitorizate din cont: `lista()`, `adauga()`, `sterge()`."""
+        self.vin = AsyncClientVin(http)
+        """Decodarea VIN: `await acteo.auto.vin.decodeaza("WVWZZZ1KZBW000000")`."""
+        self.numere = AsyncClientNumere(http)
+        """Numere disponibile la DGPCI: `await acteo.auto.numere.verifica("BV07ABC")`."""
+        self.imagini = AsyncClientImagini(http, ceas)
+        """Pozele masinilor: `await acteo.auto.imagini.obtine(marca=..., model=..., an=...)`."""
 
 
 class AsyncActeo(_ClientAsincron):
@@ -242,7 +318,8 @@ class AsyncActeo(_ClientAsincron):
     >>> async with AsyncActeo() as acteo:  # cheia din ACTEO_API_KEY
     ...     rca = await acteo.auto.rca.verifica("B123ABC")
 
-    `acteo.auto.rca`, `.itp`, `.rovinieta`, `.arr`, `acteo.auto.flota` si `acteo.webhooks`.
+    `acteo.auto.rca`, `.itp`, `.rovinieta`, `.arr`, `acteo.auto.flota`, `.vin`, `.numere`,
+    `.imagini` si `acteo.webhooks`.
     Cheia vine din `api_key`, altfel din `ACTEO_API_KEY`, apoi din `VERIFICRCA_API_KEY`.
     `http_client` permite un `httpx.AsyncClient` propriu; SDK-ul nu il inchide. Constructorul nu
     face cereri pe retea.
@@ -271,7 +348,9 @@ class AsyncActeo(_ClientAsincron):
             ceas=_ceas,
             aleator=_aleator,
         )
-        self.auto = AsyncClientAuto(AsyncClientVerificari(self._http, self._ceas), AsyncClientVehicule(self._http))
-        """Documentele unei masini si flota."""
+        self.auto = AsyncClientAuto(
+            AsyncClientVerificari(self._http, self._ceas), AsyncClientVehicule(self._http), self._http, self._ceas
+        )
+        """Documentele unei masini, flota, VIN, numere si poze."""
         self.webhooks = ClientWebhooks()
         """Citirea webhook-urilor."""

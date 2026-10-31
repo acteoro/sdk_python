@@ -1,15 +1,25 @@
 import json
 from collections.abc import Iterator
+from datetime import datetime, timezone
 
 import httpx
 import pytest
 
 from acteo import (
     HEADER_CHEIE,
+    HEADER_EVENIMENT,
     EroareWebhook,
     StatusWebhook,
     TipVerificare,
+    WebhookAsigurareSchimbare,
     WebhookDocumentExpira,
+    WebhookDosarEveniment,
+    WebhookDosarTermen,
+    WebhookFirmaDosar,
+    WebhookFirmaSchimbare,
+    WebhookMarcaExpira,
+    WebhookMarcaSchimbare,
+    WebhookTermenExpira,
     WebhookTest,
     parseaza_webhook_rezultat,
     verifica_webhook_notificare,
@@ -75,7 +85,7 @@ class HeadereCaWerkzeug:
     "corp", [json.dumps(EXPIRA), json.dumps(EXPIRA).encode(), bytearray(json.dumps(EXPIRA).encode()), EXPIRA]
 )
 def test_document_expira_din_orice_corp(corp: object) -> None:
-    ev = verifica_webhook_notificare(corp, {"x-verificrca-key": CHEIE}, CHEIE)  # type: ignore[arg-type]
+    ev = verifica_webhook_notificare(corp, {"x-acteo-key": CHEIE}, CHEIE)  # type: ignore[arg-type]
     assert isinstance(ev, WebhookDocumentExpira)
     assert (ev.document, ev.zile_ramase, ev.vehicul.numar_inmatriculare) == (TipVerificare.RCA, 14, "B123ABC")
 
@@ -83,16 +93,36 @@ def test_document_expira_din_orice_corp(corp: object) -> None:
 @pytest.mark.parametrize(
     "headere",
     [
+        {"X-Acteo-Key": CHEIE},
+        {"X-ACTEO-KEY": CHEIE},
+        {"x-acteo-key": [CHEIE]},
+        {"HTTP_X_ACTEO_KEY": CHEIE, "CONTENT_TYPE": "application/json"},
+        httpx.Headers({"x-acteo-key": CHEIE}),
+        HeadereCaWerkzeug([("Content-Type", "application/json"), ("X-Acteo-Key", CHEIE)]),
+        # Numele vechi, citit doar cand lipseste cel nou.
         {"X-Verificrca-Key": CHEIE},
-        {"X-VERIFICRCA-KEY": CHEIE},
-        {"x-verificrca-key": [CHEIE]},
-        {"HTTP_X_VERIFICRCA_KEY": CHEIE, "CONTENT_TYPE": "application/json"},
+        {"HTTP_X_VERIFICRCA_KEY": CHEIE},
         httpx.Headers({"x-verificrca-key": CHEIE}),
-        HeadereCaWerkzeug([("Content-Type", "application/json"), ("X-Verificrca-Key", CHEIE)]),
+        HeadereCaWerkzeug([("X-Verificrca-Key", CHEIE)]),
     ],
 )
 def test_headere_din_framework_uri(headere: object) -> None:
     assert isinstance(verifica_webhook_notificare(TEST, headere, CHEIE), WebhookTest)
+
+
+def test_numele_headerelor() -> None:
+    assert (HEADER_CHEIE, HEADER_EVENIMENT) == ("x-acteo-key", "x-acteo-event")
+
+
+def test_headerul_nou_are_prioritate_fata_de_cel_vechi() -> None:
+    # O cheie veche corecta nu salveaza una noua gresita.
+    headere = {"X-Acteo-Key": "whsec_gresit", "X-Verificrca-Key": CHEIE}
+    assert cod_eroare(TEST, headere, CHEIE) == "CHEIE_INVALIDA"
+
+
+def test_mesajul_cheii_invalide_numeste_headerul_nou() -> None:
+    with pytest.raises(EroareWebhook, match="X-Acteo-Key"):
+        verifica_webhook_notificare(TEST, {}, CHEIE)
 
 
 def test_eveniment_test() -> None:
@@ -167,3 +197,139 @@ def test_rezultat_invalid() -> None:
     with pytest.raises(EroareWebhook) as info:
         parseaza_webhook_rezultat("nu")
     assert info.value.cod == "JSON_INVALID"
+
+
+COMUN = {"id": "liv_2", "trimisLa": "2026-10-30T10:00:00.000Z"}
+EVENIMENTE: list[tuple[dict[str, object], type]] = [
+    (
+        {
+            "event": "dosar.eveniment",
+            **COMUN,
+            "dosar": {"id": "d1", "numar": "1234/3/2024", "eticheta": None},
+            "eveniment": {"tip": "termen_nou", "descriere": "Termen nou", "institutie": "Tribunalul Bucuresti"},
+        },
+        WebhookDosarEveniment,
+    ),
+    (
+        {
+            "event": "dosar.termen",
+            **COMUN,
+            "dosar": {"id": "d1", "numar": "1234/3/2024", "eticheta": "Litigiu"},
+            "sedinta": {"data": "2026-11-02T00:00:00.000Z", "ora": "09:00", "institutie": None, "complet": "C1"},
+            "zileRamase": 3,
+        },
+        WebhookDosarTermen,
+    ),
+    (
+        {
+            "event": "firma.schimbare",
+            **COMUN,
+            "firma": {"id": "f1", "denumire": "Exemplu SRL"},
+            "schimbari": [
+                {"camp": "platitor_tva", "valoareVeche": "nu", "valoareNoua": "da", "dataEfect": "2026-11-01"}
+            ],
+        },
+        WebhookFirmaSchimbare,
+    ),
+    (
+        {
+            "event": "firma.dosar",
+            **COMUN,
+            "firma": {"id": "f1", "denumire": "Exemplu SRL"},
+            "dosar": {
+                "numar": "99/2/2026",
+                "institutie": "Tribunalul Cluj",
+                "calitateParte": "Parat",
+                "obiect": None,
+                "categorie": None,
+                "insolventa": None,
+            },
+        },
+        WebhookFirmaDosar,
+    ),
+    (
+        {
+            "event": "marca.schimbare",
+            **COMUN,
+            "marca": {"id": "m1", "st13": "RO500000000000001", "nume": "EXEMPLU", "oficiu": "RO", "numarDepozit": "M1"},
+            "schimbare": "reinnoita",
+            "valoareVeche": "2026-11-01",
+            "valoareNoua": "2036-11-01",
+        },
+        WebhookMarcaSchimbare,
+    ),
+    (
+        {
+            "event": "marca.expira",
+            **COMUN,
+            "marca": {"id": "m1", "st13": "EM500000000000001", "nume": "EXEMPLU", "oficiu": "EM", "numarDepozit": "1"},
+            "expiraLa": "2027-01-01",
+            "prag": "3l",
+            "reinnoirePanaLa": None,
+        },
+        WebhookMarcaExpira,
+    ),
+    (
+        {
+            "event": "asigurare.schimbare",
+            **COMUN,
+            "persoana": {"id": "p1", "nume": "Ion Popescu"},
+            "statut": "neasigurat",
+            "areCard": None,
+            "verificatLa": "2026-10-30T09:00:00.000Z",
+        },
+        WebhookAsigurareSchimbare,
+    ),
+    (
+        {
+            "event": "termen.expira",
+            **COMUN,
+            "termen": {
+                "id": "t1",
+                "categorie": "personale",
+                "tip": "pasaport",
+                "eticheta": "Pasaport",
+                "al": None,
+                "expiraLa": "2026-11-29",
+            },
+            "zileRamase": 30,
+            "prag": 30,
+        },
+        WebhookTermenExpira,
+    ),
+]
+
+
+@pytest.mark.parametrize(("corp", "model"), EVENIMENTE, ids=[str(e[0]["event"]) for e in EVENIMENTE])
+def test_evenimentele_celorlalte_servicii(corp: dict[str, object], model: type) -> None:
+    ev = verifica_webhook_notificare(json.dumps(corp), {"X-Acteo-Key": CHEIE}, CHEIE)
+    assert isinstance(ev, model)
+    assert ev.event == corp["event"]
+    assert isinstance(ev.trimis_la, datetime)
+
+
+def test_datele_iso_devin_datetime_cele_calendaristice_raman_text() -> None:
+    termen = verifica_webhook_notificare(EVENIMENTE[1][0], {HEADER_CHEIE: CHEIE}, CHEIE)
+    assert isinstance(termen, WebhookDosarTermen)
+    assert termen.sedinta.data == datetime(2026, 11, 2, tzinfo=timezone.utc)
+    assert termen.zile_ramase == 3
+    marca = verifica_webhook_notificare(EVENIMENTE[5][0], {HEADER_CHEIE: CHEIE}, CHEIE)
+    assert isinstance(marca, WebhookMarcaExpira)
+    assert marca.expira_la == "2027-01-01"
+    asigurare = verifica_webhook_notificare(EVENIMENTE[6][0], {HEADER_CHEIE: CHEIE}, CHEIE)
+    assert isinstance(asigurare, WebhookAsigurareSchimbare)
+    assert isinstance(asigurare.verificat_la, datetime)
+    assert asigurare.are_card is None
+
+
+@pytest.mark.parametrize(
+    "corp",
+    [
+        {**EVENIMENTE[1][0], "zileRamase": 2},
+        {**EVENIMENTE[4][0], "schimbare": "furata"},
+        {**EVENIMENTE[6][0], "verificatLa": "2026-10-30"},
+        {k: v for k, v in EVENIMENTE[7][0].items() if k != "termen"},
+    ],
+)
+def test_evenimente_noi_invalide(corp: object) -> None:
+    assert cod_eroare(corp, {HEADER_CHEIE: CHEIE}, CHEIE) == "PAYLOAD_INVALID"

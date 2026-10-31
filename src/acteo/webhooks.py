@@ -1,22 +1,51 @@
-"""Citirea webhook-urilor trimise de API: rezultatul unei verificari si notificarile de expirare."""
+"""Citirea webhook-urilor trimise de API: rezultatul unei verificari si notificarile din cont."""
 
 from __future__ import annotations
 
 import hmac
 import json
 from collections.abc import Mapping
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 
 from pydantic import BaseModel, ValidationError
 
 from ._intern.decodare import cale_eroare
 from .erori import EroareWebhook
-from .modele import WebhookDocumentExpira, WebhookRezultat, WebhookTest
+from .modele import (
+    WebhookAsigurareSchimbare,
+    WebhookDocumentExpira,
+    WebhookDosarEveniment,
+    WebhookDosarTermen,
+    WebhookFirmaDosar,
+    WebhookFirmaSchimbare,
+    WebhookMarcaExpira,
+    WebhookMarcaSchimbare,
+    WebhookNotificare,
+    WebhookRezultat,
+    WebhookTermenExpira,
+    WebhookTest,
+)
 
-HEADER_CHEIE = "x-verificrca-key"
-"""Headerul cu cheia de webhook a contului (`whsec_...`)."""
-HEADER_EVENIMENT = "x-verificrca-event"
-"""Headerul cu numele evenimentului (`document.expira`, `webhook.test`)."""
+HEADER_CHEIE = "x-acteo-key"
+"""Headerul cu cheia de webhook a contului."""
+HEADER_EVENIMENT = "x-acteo-event"
+"""Headerul cu numele evenimentului (`document.expira`, `webhook.test` etc.)."""
+# Numele vechi al headerului cu cheia, citit doar cand lipseste cel nou.
+_HEADER_CHEIE_VECHI = "x-verificrca-key"
+
+# Modelul fiecarui eveniment, dupa campul `event`.
+_EVENIMENTE: dict[str, type[BaseModel]] = {
+    "document.expira": WebhookDocumentExpira,
+    "dosar.eveniment": WebhookDosarEveniment,
+    "dosar.termen": WebhookDosarTermen,
+    "firma.schimbare": WebhookFirmaSchimbare,
+    "firma.dosar": WebhookFirmaDosar,
+    "marca.schimbare": WebhookMarcaSchimbare,
+    "marca.expira": WebhookMarcaExpira,
+    "asigurare.schimbare": WebhookAsigurareSchimbare,
+    "termen.expira": WebhookTermenExpira,
+    "webhook.test": WebhookTest,
+}
 
 M = TypeVar("M", bound=BaseModel)
 Corp = str | bytes | bytearray | Mapping[str, Any]
@@ -78,24 +107,28 @@ def parseaza_webhook_rezultat(corp: Corp) -> WebhookRezultat:
     return _decodeaza(WebhookRezultat, _parseaza_corp(corp))
 
 
-def verifica_webhook_notificare(corp: Corp, headere: Any, cheie: str) -> WebhookDocumentExpira | WebhookTest:
-    """Verifica si citeste o notificare `document.expira` sau un `webhook.test`.
+def verifica_webhook_notificare(corp: Corp, headere: Any, cheie: str) -> WebhookNotificare:
+    """Verifica si citeste o notificare trimisa la URL-ul de webhook al contului.
 
-    Cheia vine in headerul `X-Verificrca-Key` si e comparata in timp constant cu cea din dashboard.
+    Expirarea unui document (`document.expira`), evenimentele celorlalte servicii (`dosar.*`,
+    `firma.*`, `marca.*`, `asigurare.schimbare`, `termen.expira`) sau testul din dashboard
+    (`webhook.test`). Distinge-le dupa `event` sau cu `isinstance`.
+
+    Cheia vine in headerul `X-Acteo-Key` (`X-Verificrca-Key` e citit doar cand lipseste cel nou) si
+    e comparata in timp constant cu cea din dashboard.
     `headere` poate fi `request.headers` (Django, Flask, FastAPI/Starlette), `request.META` sau un dict.
     Arunca `EroareWebhook` (`CHEIE_NECONFIGURATA`, `CHEIE_INVALIDA`, `JSON_INVALID`, `PAYLOAD_INVALID`).
     """
     if not cheie:
         raise EroareWebhook("Lipseste cheia de webhook (argumentul `cheie`).", cod="CHEIE_NECONFIGURATA")
-    primita = _citeste_header(headere, HEADER_CHEIE)
+    primita = _citeste_header(headere, HEADER_CHEIE) or _citeste_header(headere, _HEADER_CHEIE_VECHI)
     if not primita or not hmac.compare_digest(
         primita.encode("utf-8", "surrogatepass"), cheie.encode("utf-8", "surrogatepass")
     ):
-        raise EroareWebhook("Cheia din headerul X-Verificrca-Key lipseste sau nu se potriveste.", cod="CHEIE_INVALIDA")
+        raise EroareWebhook("Cheia din headerul X-Acteo-Key lipseste sau nu se potriveste.", cod="CHEIE_INVALIDA")
     date = _parseaza_corp(corp)
     eveniment = date.get("event") if isinstance(date, Mapping) else None
-    if eveniment == "document.expira":
-        return _decodeaza(WebhookDocumentExpira, date)
-    if eveniment == "webhook.test":
-        return _decodeaza(WebhookTest, date)
-    raise EroareWebhook("Payload webhook invalid: eveniment necunoscut.", cod="PAYLOAD_INVALID", raspuns=date)
+    model = _EVENIMENTE.get(eveniment) if isinstance(eveniment, str) else None
+    if model is None:
+        raise EroareWebhook("Payload webhook invalid: eveniment necunoscut.", cod="PAYLOAD_INVALID", raspuns=date)
+    return cast(WebhookNotificare, _decodeaza(model, date))

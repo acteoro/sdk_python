@@ -8,10 +8,12 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import date
+from typing import get_args
 from urllib.parse import urlsplit
 
 from .erori import EroareValidare
-from .tipuri import TipVerificare
+from .tipuri import TipVerificare, UnghiImagine
 
 _JUDETE = (
     "AB|AR|AG|BC|BH|BN|BT|BV|BR|BZ|CS|CL|CJ|CT|CV|DB|DJ|GL|GR|GJ|HD|HR"
@@ -22,6 +24,9 @@ _NUMAR = re.compile(
     rf"B\d{{2,3}}[A-Z]{{2,3}}|({_JUDETE})\d{{2}}[A-Z]{{2,3}}|CD\d{{3}}[A-Z]{{1,3}}|TC\d{{4}}[A-Z]{{2}}",
     re.IGNORECASE | re.ASCII,
 )
+# Numerele verificate la DGPCI: judet (sau B), cifrele si exact trei litere.
+_NUMAR_DGPCI = re.compile(rf"(B\d{{2,3}}|({_JUDETE})\d{{2}})[A-Z]{{3}}", re.IGNORECASE | re.ASCII)
+_WILDCARD = re.compile(r"[?*]")
 _VIN = re.compile(r"[A-HJ-NPR-Z0-9]{17}", re.IGNORECASE | re.ASCII)
 _NUMAR_FLOTA = re.compile(r"[A-Z0-9\s-]*", re.IGNORECASE | re.ASCII)
 _SERIE_FLOTA = re.compile(r"[A-Z0-9]*", re.IGNORECASE | re.ASCII)
@@ -262,4 +267,76 @@ def valideaza_vehicul_nou(
         corp["serieTalon"] = talon_norm
     if arr_monitorizat is not None:
         corp["arrMonitorizat"] = arr_monitorizat
+    return corp
+
+
+# --- Produsele cu raspuns sincron ---
+
+
+def valideaza_vin_decodare(vin: str) -> str:
+    """VIN-ul pentru decodare, normalizat, sau `EroareValidare`."""
+    n = normalizeaza(vin) if isinstance(vin, str) else ""
+    if not _este_vin(n):
+        raise _eroare(_explica_vin(n), "vin")
+    return n
+
+
+def valideaza_numar_disponibil(numar: str) -> str:
+    """Numarul pentru DGPCI, normalizat, sau `EroareValidare`."""
+    brut = numar if isinstance(numar, str) else ""
+    if _WILDCARD.search(brut):
+        raise _eroare("API-ul verifica un singur numar complet, fara `?` sau `*`.", "numar")
+    n = normalizeaza(brut)
+    if not n:
+        raise _eroare("Lipseste numarul de inmatriculare.", "numar")
+    if _NUMAR_DGPCI.fullmatch(n) is None:
+        raise _eroare(
+            f"Numarul {n} nu e complet: trimite indicativul judetului, cifrele si trei litere (ex: BV07ABC).", "numar"
+        )
+    return n
+
+
+UNGHIURI_IMAGINE: tuple[UnghiImagine, ...] = get_args(UnghiImagine)
+"""Unghiurile acceptate pentru poza unei masini, primul fiind cel implicit."""
+
+_SEMNE_TEXT_MASINA = frozenset(" ./+&'()-")
+_LUNGIME_MAXIMA_TEXT_MASINA = 66
+
+
+def _valideaza_text_masina(valoare: object, camp: str) -> str:
+    if not isinstance(valoare, str):
+        raise _eroare(f"Trimite `{camp}` ca text.", camp)
+    t = valoare.strip()
+    if not t:
+        raise _eroare(f"`{camp}` nu poate fi gol.", camp)
+    # Lungimea in unitati UTF-16, ca in API.
+    if len(t.encode("utf-16-le")) // 2 > _LUNGIME_MAXIMA_TEXT_MASINA:
+        raise _eroare(f"`{camp}` are cel mult {_LUNGIME_MAXIMA_TEXT_MASINA} de caractere.", camp)
+    # isalnum() = litere si cifre Unicode, ca \p{L}\p{N} din API.
+    if not all(c.isalnum() or c in _SEMNE_TEXT_MASINA for c in t):
+        raise _eroare(f"`{camp}` poate contine doar litere, cifre, spatii si . / + & ' ( ) -", camp)
+    return t
+
+
+def valideaza_cerere_imagine(
+    marca: str, model: str, an: int, unghi: UnghiImagine | str | None = None, umbra: bool | None = None
+) -> dict[str, object]:
+    """Corpul cererii de poza, validat ca in API."""
+    corp: dict[str, object] = {
+        "marca": _valideaza_text_masina(marca, "marca"),
+        "model": _valideaza_text_masina(model, "model"),
+    }
+    an_maxim = date.today().year + 1
+    intreg = isinstance(an, int) or (isinstance(an, float) and an.is_integer())
+    if isinstance(an, bool) or not intreg or not 1950 <= an <= an_maxim:
+        raise _eroare(f"`an` trebuie sa fie un numar intreg intre 1950 si {an_maxim}.", "an")
+    corp["an"] = int(an)
+    if unghi is not None:
+        if unghi not in UNGHIURI_IMAGINE:
+            raise _eroare(f"`unghi` poate fi: {', '.join(UNGHIURI_IMAGINE)}.", "unghi", list(UNGHIURI_IMAGINE))
+        corp["unghi"] = unghi
+    if umbra is not None:
+        if not isinstance(umbra, bool):
+            raise _eroare("Trimite `umbra` ca True sau False.", "umbra")
+        corp["umbra"] = umbra
     return corp

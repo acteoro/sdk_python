@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "acteo"
 dynamic = ["version"]
-description = "SDK Python oficial pentru API-ul public Acteo: verificare RCA, ITP, rovinieta si copie conforma ARR dupa numar de inmatriculare sau serie de sasiu (VIN), monitorizarea flotei si webhook-uri de expirare."
+description = "SDK Python oficial pentru API-ul public Acteo: verificare RCA, ITP, rovinieta si copie conforma ARR dupa numar de inmatriculare sau serie de sasiu (VIN), plus decodare VIN, numere de inmatriculare disponibile, poze de masini, monitorizarea flotei si webhook-uri."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -14,6 +14,8 @@ authors = [{ name = "Acteo.ro", email = "contact@acteo.ro" }]
 keywords = [
     "acteo", "verificrca", "verificare rca", "verificare itp", "verificare rovinieta", "verificare arr",
     "rca", "itp", "rovinieta", "copie conforma arr", "asigurare auto", "flota auto", "romania",
+    "decodare vin", "vin decoder", "numere disponibile", "numar inmatriculare disponibil", "dgpci",
+    "imagini masini", "poze masini",
     "api", "sdk", "car insurance check", "vehicle inspection", "road tax", "fleet management",
 ]
 classifiers = [

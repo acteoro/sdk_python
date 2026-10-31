@@ -19,6 +19,8 @@ class CerereHttp:
     """Cererea poate fi repetata fara efecte in plus (GET, DELETE)."""
     query: Mapping[str, str | None] = field(default_factory=dict)
     corp: Mapping[str, object] | None = None
+    timeout_minim_ms: float | None = None
+    """Timeout minim pentru aceasta cerere, peste cel al clientului (ex: raspunsuri sincrone lente)."""
 
 
 @dataclass(frozen=True)

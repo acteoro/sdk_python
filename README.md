@@ -6,7 +6,7 @@
 
 SDK-ul oficial Python pentru [API-ul Acteo](https://acteo.ro/api-acces). Cu el verifici din cod dacă o mașină are RCA valabil, ITP la zi, rovinietă plătită sau copie conformă ARR, după numărul de înmatriculare sau seria de șasiu (VIN). Datele vin din sursele oficiale: baza AIDA pentru asigurarea RCA, RAR pentru inspecția tehnică periodică, CNAIR pentru rovinietă și ARR pentru transportul rutier.
 
-Pe lângă verificările la cerere, SDK-ul gestionează vehiculele monitorizate din cont și citește webhook-urile trimise când un document se apropie de expirare. Are client sincron (Django, Flask, scripturi, Celery) și asincron (FastAPI, asyncio), cu tipuri complete. Dacă ai o firmă de leasing, rent-a-car sau curierat, un service auto ori pur și simplu o flotă, afli din timp ce RCA, ITP sau rovinietă expiră, înainte să vină amenda.
+Pe lângă verificările la cerere, SDK-ul decodează serii de șasiu, verifică la DGPCI dacă un număr de înmatriculare e liber, aduce poze de studio ale mașinilor, gestionează vehiculele monitorizate din cont și citește webhook-urile trimise când un document se apropie de expirare. Are client sincron (Django, Flask, scripturi, Celery) și asincron (FastAPI, asyncio), cu tipuri complete. Dacă ai o firmă de leasing, rent-a-car sau curierat, un service auto ori pur și simplu o flotă, afli din timp ce RCA, ITP sau rovinietă expiră, înainte să vină amenda.
 
 > Ai nevoie de o cheie API. O generezi din [contul tău Acteo](https://app.acteo.ro/api/chei), după ce alegi un plan de pe [pagina API](https://acteo.ro/api-acces).
 
@@ -18,7 +18,7 @@ with Acteo() as acteo:  # cheia din ACTEO_API_KEY
     print(rca.status.value, rca.expires_at)  # valid 2027-03-01 00:00:00+00:00
 ```
 
-Apelurile sunt grupate pe domeniu și pe document, deci citești din cod ce verifici: `acteo.auto.rca`, `acteo.auto.itp`, `acteo.auto.rovinieta`, `acteo.auto.arr`, plus `acteo.auto.flota` pentru vehiculele din cont și `acteo.webhooks` pentru notificări.
+Apelurile sunt grupate pe domeniu și pe document, deci citești din cod ce verifici: `acteo.auto.rca`, `acteo.auto.itp`, `acteo.auto.rovinieta`, `acteo.auto.arr`, plus `acteo.auto.flota` pentru vehiculele din cont, `acteo.auto.vin`, `acteo.auto.numere` și `acteo.auto.imagini` pentru celelalte produse și `acteo.webhooks` pentru notificări.
 
 ## Cuprins
 
@@ -46,7 +46,10 @@ Apelurile sunt grupate pe domeniu și pe document, deci citești din cod ce veri
 | Verificare rovinietă | `acteo.auto.rovinieta.verifica()` | Dacă rovinieta e plătită și până când, din CNAIR |
 | Verificare copie conformă ARR | `acteo.auto.arr.verifica()` | Valabilitatea copiei conforme pentru transportatori |
 | Gestionare flotă | `acteo.auto.flota` | Adaugi, listezi și ștergi vehiculele monitorizate automat |
-| Webhook-uri | `acteo.webhooks` | Rezultatul verificării la URL-ul tău, alerte `document.expira` la 30, 14 și 3 zile |
+| Decodare VIN | `acteo.auto.vin.decodeaza()` | Marca, modelul, anul de fabricație și structura seriei de șasiu |
+| Număr de înmatriculare disponibil | `acteo.auto.numere.verifica()` | Dacă numărul e liber la DGPCI și poate fi rezervat |
+| Poza unei mașini | `acteo.auto.imagini.obtine()` | Link spre o poză de studio (WebP transparent) după marcă, model și an |
+| Webhook-uri | `acteo.webhooks` | Rezultatul verificării la URL-ul tău, alerte `document.expira` la 30, 14 și 3 zile, plus evenimentele celorlalte servicii din cont |
 | Validare locală | | Numărul de înmatriculare, VIN-ul și numărul talonului sunt verificate înainte de cerere, deci o greșeală de tastare nu consumă din cotă |
 | Excepții tipate | | O clasă de excepție pentru fiecare situație, cu mesaj în română și `hint` de rezolvare |
 | Reîncercări sigure | | Backoff exponențial cu jitter, `Retry-After` respectat, niciun POST taxat de două ori |
@@ -135,6 +138,39 @@ Vezi și [unde găsești numărul certificatului de înmatriculare](#unde-găses
 ```python
 arr = acteo.auto.arr.verifica("CJ45XYZ")
 ```
+
+### Decodare VIN
+
+```python
+d = acteo.auto.vin.decodeaza("WVWZZZ1KZBW000000")
+print(d.marca, d.model, d.an_fabricatie)  # Volkswagen Golf 2011
+print(d.structura.wmi, d.structura.cifra_control)  # WVW neaplicabila
+```
+
+Decodarea consumă din cotă doar când găsește marca și modelul (`taxat` e `True`). Fără ele primești totuși structura VIN-ului (WMI, VDS, VIS, țara, cifra de control, anii posibili), calculată din cele 17 caractere.
+
+### Verifică dacă un număr de înmatriculare e liber
+
+```python
+r = acteo.auto.numere.verifica("BV 07 ABC")
+if r.disponibil:
+    print(f"{r.numar} e liber")
+```
+
+Răspunsul vine direct de la DGPCI, în aceeași cerere, și poate dura până la două minute. SDK-ul dă acestei cereri un timeout de cel puțin 150 de secunde, oricât de mic e `timeout_ms` din client. Consumă din cotă doar când DGPCI dă un verdict.
+
+### Poza unei mașini
+
+```python
+p = acteo.auto.imagini.obtine(marca="Volkswagen", model="Golf", an=2015, unghi="fata")
+if p.status == "gata":
+    afiseaza(p.url)  # link valabil până la p.expira_la
+
+# sau așteaptă cât timp poza e încă în lucru:
+gata = acteo.auto.imagini.asteapta(marca="Volkswagen", model="Golf", an=2015)
+```
+
+Cu `status == "gata"` primești poza mașinii cerute și cererea se taxează. Altfel primești poza generică (mașina sub husă), netaxată: `in-lucru` înseamnă că poza se generează acum, `necunoscut` că marca sau modelul nu au fost identificate, iar `indisponibil` că generarea a eșuat.
 
 ## Client async
 
@@ -301,6 +337,22 @@ Scoate vehiculul din cont. Aruncă `EroareNegasit` dacă ID-ul nu există în co
 
 Operațiile pe flotă nu consumă din cota de verificări, dar cer un plan activ.
 
+### `auto.vin.decodeaza(vin)`
+
+Decodează o serie de șasiu. Întoarce `DecodareVin` cu `marca`, `model`, `an_fabricatie`, `sursa_an` (`"pozitia-10"`, `"generatie"` sau `"anunturi"`), `modele_posibile` și `structura` (`wmi`, `vds`, `vis`, `regiune`, `tara`, `cifra_control`, `cifra_control_asteptata`, `ani_posibili`). `gasit` spune dacă marca e cunoscută, iar `taxat` dacă cererea s-a consumat din cotă. VIN-ul e validat local înainte de cerere. Cere un abonament de decodare VIN.
+
+### `auto.numere.verifica(numar)`
+
+Verifică la DGPCI un singur număr complet: indicativul județului, cifrele și trei litere (`BV07ABC`, `B123ABC`). Numerele incomplete sau cu `?` și `*` sunt respinse local. Întoarce `NumarDisponibil` cu `numar` (normalizat), `disponibil` și `mesaj` (textul DGPCI, sau `None`). Dacă DGPCI nu acceptă numărul primești `EroareValidare` cu `cod` `"NUMAR_RESPINS"`. Când verificarea nu poate rula primești `EroareServer` cu `cod` `OCUPAT`, `INDISPONIBIL`, `EROARE_DGPCI` sau `TIMEOUT`. Niciuna nu se taxează, iar `OCUPAT` se reîncearcă singur după `Retry-After`. Cere un abonament de numere disponibile.
+
+### `auto.imagini.obtine(*, marca, model, an, unghi=None, umbra=None)`
+
+Răspunde imediat cu poza mașinii sau cu poza generică. `unghi` poate fi `"trei-sferturi"` (implicit), `"fata"`, `"profil"`, `"spate"`, `"trei-sferturi-dreapta"` sau `"profil-dreapta"`, iar `umbra` e implicit `True`. Întoarce `ImagineMasina` cu `gata`, `status`, `taxat`, `url`, `expira_la` (`datetime`), `latime`, `inaltime`, `marca` și `model` (forma canonică) și `generatie` (`eticheta`, `an_de`, `an_pana`, `caroserie`, sau `None`). La `in-lucru`, `retry_after_ms` spune când să ceri din nou. Linkul expiră după 24 de ore. Fiecare cerere a unei poze gata se taxează, deci păstrează linkul până la `expira_la`. Cere un abonament de imagini mașini.
+
+### `auto.imagini.asteapta(*, marca, model, an, unghi=None, umbra=None, timeout_ms=120000)`
+
+Ca `obtine()`, dar cât timp poza e `in-lucru` o cere din nou, cu pauzele din `Retry-After` (cel puțin 10 secunde). Întoarce primul răspuns care nu mai e `in-lucru`. După `timeout_ms` (implicit 2 minute) aruncă `EroareTimeoutVerificare`. Cererile intermediare nu se taxează, dar intră în plafonul zilnic de poze generice.
+
 ### Utilitare de validare
 
 ```python
@@ -326,8 +378,9 @@ Le poți folosi în formularele tale (de exemplu într-un validator Django sau P
 | Constantă | Valoare |
 |---|---|
 | `TIPURI_VERIFICARE` | `TipVerificare.RCA`, `ITP`, `ROVINIETA`, `ARR`, util pentru dropdown-uri și validare |
-| `HEADER_CHEIE` | `"x-verificrca-key"`, headerul cu cheia de webhook |
-| `HEADER_EVENIMENT` | `"x-verificrca-event"`, headerul cu numele evenimentului |
+| `UNGHIURI_IMAGINE` | unghiurile acceptate de `auto.imagini` |
+| `HEADER_CHEIE` | `"x-acteo-key"`, headerul cu cheia de webhook |
+| `HEADER_EVENIMENT` | `"x-acteo-event"`, headerul cu numele evenimentului |
 | `URL_IMPLICIT` | `"https://api.acteo.ro"` |
 | `VERSIUNE_SDK` | versiunea pachetului, trimisă în `User-Agent` |
 
@@ -362,9 +415,9 @@ async def rezultat(request: Request) -> dict[str, bool]:
 
 Pune un segment greu de ghicit în URL, păstrează-l pe HTTPS și verifică dacă `request_id`-ul primit corespunde celui întors de `porneste()` înainte să te bazezi pe conținut.
 
-### Notificări de expirare (`document.expira`)
+### Notificări din cont (`document.expira` și celelalte evenimente)
 
-Pe planurile care includ webhook-uri, configurezi un URL în dashboard și primești câte un eveniment când un document al unui vehicul monitorizat intră într-un prag de expirare. Pentru RCA, ITP și rovinietă pragurile sunt 30, 14 și 3 zile, iar pentru ARR 60, 50 și 45 de zile. Fiecare cerere vine cu cheia contului în headerul `X-Verificrca-Key`. SDK-ul o compară în timp constant, ca să nu dezvăluie nimic prin durata comparației.
+Pe planurile care includ webhook-uri, configurezi un URL în dashboard și primești câte un eveniment când un document al unui vehicul monitorizat intră într-un prag de expirare. Pentru RCA, ITP și rovinietă pragurile sunt 30, 14 și 3 zile, iar pentru ARR 60, 50 și 45 de zile. Fiecare cerere vine cu cheia contului în headerul `X-Acteo-Key` și cu numele evenimentului în `X-Acteo-Event`. SDK-ul o compară în timp constant, ca să nu dezvăluie nimic prin durata comparației.
 
 `acteo.webhooks.verifica_notificare(corp, headere, cheie)` primește headerele în forma în care ți le dă framework-ul: `request.headers` din FastAPI, Starlette, Flask sau Django, `request.META` din Django ori un simplu `dict`.
 
@@ -436,11 +489,28 @@ Codurile `EroareWebhook`:
 | `cod` | Când |
 |---|---|
 | `CHEIE_NECONFIGURATA` | Ai trimis o cheie goală (de obicei lipsește variabila de mediu) |
-| `CHEIE_INVALIDA` | Headerul `X-Verificrca-Key` lipsește sau nu se potrivește |
+| `CHEIE_INVALIDA` | Headerul `X-Acteo-Key` lipsește sau nu se potrivește |
 | `JSON_INVALID` | Corpul nu e JSON |
 | `PAYLOAD_INVALID` | Evenimentul nu are forma așteptată |
 
 Folosește `ev.id` pentru deduplicare. Un eveniment poate ajunge de mai multe ori dacă serverul tău nu răspunde cu 2xx. Butonul de test din dashboard trimite un `WebhookTest` (`event` `webhook.test`).
+
+Cu add-on-ul Webhook, la același URL vin și evenimentele celorlalte servicii din cont. `verifica_notificare()` le validează pe toate; le distingi după `event` sau cu `isinstance`:
+
+| `event` | Model | Când vine | Câmpuri principale |
+|---|---|---|---|
+| `document.expira` | `WebhookDocumentExpira` | Un document al unui vehicul intră într-un prag de expirare | `vehicul`, `document`, `expira_la`, `zile_ramase`, `prag` |
+| `dosar.eveniment` | `WebhookDosarEveniment` | Noutate într-un dosar monitorizat | `dosar`, `eveniment.tip`, `eveniment.descriere` |
+| `dosar.termen` | `WebhookDosarTermen` | Se apropie o ședință, cu 3 zile și cu o zi înainte | `dosar`, `sedinta`, `zile_ramase` |
+| `firma.schimbare` | `WebhookFirmaSchimbare` | ANAF a schimbat starea unei firme monitorizate | `firma`, `schimbari` |
+| `firma.dosar` | `WebhookFirmaDosar` | Dosar nou în instanță pe numele unei firme | `firma`, `dosar.insolventa` |
+| `marca.schimbare` | `WebhookMarcaSchimbare` | Schimbare la o marcă urmărită (OSIM sau EUIPO) | `marca`, `schimbare`, `valoare_veche`, `valoare_noua` |
+| `marca.expira` | `WebhookMarcaExpira` | O marcă intră într-un prag de expirare | `marca`, `expira_la`, `prag`, `reinnoire_pana_la` |
+| `asigurare.schimbare` | `WebhookAsigurareSchimbare` | S-a schimbat statutul de asigurat la CNAS | `persoana`, `statut`, `are_card` |
+| `termen.expira` | `WebhookTermenExpira` | Un termen din cont intră în pragul de 30 sau de 3 zile | `termen`, `zile_ramase`, `prag` |
+| `webhook.test` | `WebhookTest` | Butonul de test din dashboard | `mesaj` |
+
+Datele cu oră (`trimis_la`, `sedinta.data`, `verificat_la`) devin `datetime` cu fus orar. Datele calendaristice `yyyy-mm-dd` (`expira_la` la `marca.expira` și `termen.expira`) rămân text. Tipul `WebhookNotificare` e uniunea tuturor modelelor.
 
 ### Verificarea în joburi de coadă
 
@@ -474,19 +544,19 @@ Toate excepțiile moștenesc `ActeoError`, care moștenește `Exception`. Fiecar
 | Clasă | Când apare | Câmpuri utile |
 |---|---|---|
 | `EroareConfigurare` | Cheie lipsă sau opțiuni invalide | `hint` |
-| `EroareValidare` | Date greșite, local sau HTTP 400 | `camp`, `acceptate` |
+| `EroareValidare` | Date greșite, local sau HTTP 400; 422 când DGPCI refuză numărul (`NUMAR_RESPINS`) | `camp`, `acceptate`, `cod` |
 | `EroareAutentificare` | 401: cheie invalidă sau dezactivată | `hint` |
 | `EroarePlanInactiv` | 402: fără abonament activ | `hint` |
 | `EroareInterzis` | 403: `LIMIT_ATINS`, `ARR_NECESITA_PLAN` | `cod`, `limita` |
 | `EroareNegasit` | 404: vehicul inexistent în cont | |
 | `EroareConflict` | 409: `VEHICUL_EXISTENT` | |
 | `EroareLimita` | 429: cotă, plafon de flotă sau polling prea des | `cod`, `retry_after_ms`, `utilizare_zi`, `utilizare_luna` |
-| `EroareServer` | 5xx | `status` |
+| `EroareServer` | 5xx; la numere disponibile `OCUPAT`, `INDISPONIBIL`, `EROARE_DGPCI`, `TIMEOUT` | `status`, `cod`, `retry_after_ms` |
 | `EroareHttp` | Alt status HTTP neașteptat, inclusiv redirecturi | `status` |
 | `EroareRetea` | Fără răspuns sau timeout | `timeout`, `neajunsa` |
 | `EroareRaspunsInvalid` | Răspuns cu formă neașteptată | `raspuns` |
 | `EroareVerificare` | Sursa nu a răspuns sau a refuzat datele trimise; `cod` e mereu `VERIFICARE_ESUATA` | `cod_sursa`: `serie_talon_invalida`, `vin_invalid`, `numar_invalid` sau `None` |
-| `EroareTimeoutVerificare` | `asteapta()` a depășit `timeout_ms` | |
+| `EroareTimeoutVerificare` | `asteapta()` sau `imagini.asteapta()` a depășit `timeout_ms` | |
 | `EroareWebhook` | Cheie greșită sau payload invalid | `cod` |
 
 ```python
@@ -516,7 +586,9 @@ SDK-ul nu trimite niciodată de două ori o verificare taxată.
 | Rețea căzută, timeout la citirea răspunsului | se reîncearcă | nu (cererea poate să fi ajuns) |
 | Redirect (3xx) | nu, `EroareHttp` | nu |
 | DNS, conexiune refuzată, eroare TLS, timeout la conectare | se reîncearcă | se reîncearcă (sigur nu a ajuns) |
-| 502, 503, 504 | se reîncearcă | se reîncearcă (proxy, nu aplicația) |
+| 502, 503, 504 fără `cod` | se reîncearcă | se reîncearcă (proxy, nu aplicația) |
+| 503 `OCUPAT` la numere disponibile | | se reîncearcă după `Retry-After`, dacă acesta nu depășește `intarziere_maxima_ms` (netaxat) |
+| 502, 503, 504 cu alt `cod` | | nu (netaxat, dar repetarea nu ajută imediat) |
 | 500 | se reîncearcă | nu |
 | 429 la polling | se reîncearcă după `Retry-After`, dacă acesta nu depășește `intarziere_maxima_ms` | |
 | 429 cotă sau plafon flotă | nu | nu |
@@ -534,9 +606,9 @@ acteo = Acteo(
 
 ## Cotă și limite
 
-Fiecare verificare consumă o unitate din cota zilnică și lunară a planului, dar numai când sursa oficială a răspuns, inclusiv atunci când refuză datele trimise. Dacă mașina a fost verificată de curând, primești imediat rezultatul existent, iar cererea consumă din cotă. Dacă sursa nu răspunde, nu consumi nimic. Verificările încă în curs ocupă cota până la răspuns, ca să nu treci de limită cu cereri trimise în paralel.
+Fiecare verificare consumă o unitate din cota zilnică și lunară a planului, dar numai când sursa oficială a răspuns, inclusiv atunci când refuză datele trimise. Decodarea VIN, numerele disponibile și pozele au fiecare abonamentul și cota lor: decodarea se taxează doar cu marcă și model găsite, numărul doar când DGPCI dă un verdict, iar poza doar când e gata. Decodările fără rezultat și pozele generice au un plafon zilnic separat. Dacă mașina a fost verificată de curând, primești imediat rezultatul existent, iar cererea consumă din cotă. Dacă sursa nu răspunde, nu consumi nimic. Verificările încă în curs ocupă cota până la răspuns, ca să nu treci de limită cu cereri trimise în paralel.
 
-Rezultatele au câmpul `limite`, completat din headerele `X-RateLimit-*`:
+Rezultatele (inclusiv decodările, numerele și pozele) au câmpul `limite`, completat din headerele `X-RateLimit-*`:
 
 ```python
 r = acteo.auto.rca.porneste("B123ABC")
@@ -627,6 +699,14 @@ Da. SDK-ul nu depinde de niciun framework. În Django și Flask folosești `Acte
 ### Pot folosi SDK-ul în Celery sau alte joburi de coadă?
 
 Da. `VerificareInCurs` se serializează în JSON, așa că pornești verificarea într-un job și citești rezultatul în altul (exemplul din [Verificarea în joburi de coadă](#verificarea-în-joburi-de-coadă)). Excepțiile trec prin `pickle` fără să-și piardă atributele.
+
+### Cum verific dacă un număr de înmatriculare e liber?
+
+Apelezi `acteo.auto.numere.verifica("BV07ABC")`. SDK-ul trimite numărul la DGPCI și îți întoarce `disponibil` `True` dacă e liber și poate fi rezervat. Trimite numărul complet, cu județ, cifre și trei litere; căutările cu `?` sau `*` nu sunt acceptate.
+
+### Ce aflu dintr-o serie de șasiu (VIN)?
+
+Cu `acteo.auto.vin.decodeaza(vin)` afli marca, modelul și anul de fabricație, plus structura VIN-ului: producătorul (WMI), țara, cifra de control și anii posibili. Câmpul `sursa_an` spune de unde vine anul, iar `modele_posibile` apare când datele nu indică un singur model.
 
 ### Există SDK pentru Node.js sau PHP?
 

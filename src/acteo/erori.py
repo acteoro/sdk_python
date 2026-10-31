@@ -40,7 +40,8 @@ class EroareConfigurare(VerificRcaError):
 
 
 class EroareValidare(VerificRcaError):
-    """Datele trimise sunt invalide: local, inainte de orice cerere (nu consuma din cota), sau 400 de la API."""
+    """Datele trimise sunt invalide: local, inainte de orice cerere (nu consuma din cota), 400 de la API
+    sau 422 cand sursa oficiala refuza valoarea (ex: `NUMAR_RESPINS` la numerele disponibile)."""
 
     def __init__(
         self,
@@ -118,7 +119,24 @@ class EroareLimita(VerificRcaError):
 
 
 class EroareServer(VerificRcaError):
-    """5xx: eroare pe serverul API-ului. Cererile sigure se reincearca automat."""
+    """5xx: eroare pe serverul API-ului. Cererile sigure se reincearca automat.
+
+    La numerele disponibile, `cod` spune de ce: `OCUPAT`, `INDISPONIBIL`, `EROARE_DGPCI` sau
+    `TIMEOUT`; cererea nu s-a taxat. `retry_after_ms` vine din headerul `Retry-After`.
+    """
+
+    def __init__(
+        self,
+        mesaj: str,
+        *,
+        status: int | None = None,
+        cod: str | None = None,
+        hint: str | None = None,
+        raspuns: object = None,
+        retry_after_ms: int | None = None,
+    ) -> None:
+        super().__init__(mesaj, status=status, cod=cod, hint=hint, raspuns=raspuns)
+        self.retry_after_ms = retry_after_ms
 
 
 class EroareHttp(VerificRcaError):
@@ -176,7 +194,8 @@ class EroareVerificare(VerificRcaError):
 
 
 class EroareTimeoutVerificare(VerificRcaError):
-    """`asteapta` sau `verifica_si_asteapta` a depasit timpul maxim de asteptare."""
+    """Asteptarea unei verificari (`verifica`, `asteapta`) sau a unei poze (`imagini.asteapta`) a depasit
+    timpul maxim."""
 
 
 class EroareWebhook(VerificRcaError):

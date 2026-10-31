@@ -88,6 +88,9 @@ def eroare_din_raspuns(status: int, headere: Mapping[str, str], corp: object, ac
 
     if status == 400:
         return EroareValidare(mesaj, acceptate=c.get("accepted"), **comune)
+    if status == 422:
+        # Sursa oficiala refuza valoarea trimisa (ex: NUMAR_RESPINS).
+        return EroareValidare(mesaj, **comune)
     if status == 401:
         return EroareAutentificare(mesaj, **comune)
     if status == 402:
@@ -110,7 +113,7 @@ def eroare_din_raspuns(status: int, headere: Mapping[str, str], corp: object, ac
             **comune,
         )
     if status >= 500:
-        return EroareServer(mesaj, **comune)
+        return EroareServer(mesaj, retry_after_ms=citeste_retry_after(headere, acum_ms), **comune)
     return EroareHttp(mesaj, **comune)
 
 

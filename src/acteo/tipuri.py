@@ -1,6 +1,7 @@
 """Enum-urile contractului public."""
 
 from enum import Enum
+from typing import Literal
 
 
 class TipVerificare(str, Enum):
@@ -35,3 +36,18 @@ class StatusWebhook(str, Enum):
     EXPIRED = "expired"
     NOT_FOUND = "not_found"
     ERROR = "error"
+
+
+UnghiImagine = Literal["trei-sferturi", "fata", "profil", "spate", "trei-sferturi-dreapta", "profil-dreapta"]
+"""Unghiul pozei unei masini. Implicit `"trei-sferturi"`."""
+
+StatusImagine = Literal["gata", "in-lucru", "necunoscut", "indisponibil"]
+"""Starea pozei unei masini.
+
+- `gata`: poza masinii cerute (se taxeaza);
+- `in-lucru`: poza se genereaza acum; cere din nou dupa `retry_after_ms`;
+- `necunoscut`: marca sau modelul nu au fost identificate;
+- `indisponibil`: generarea a esuat; se reincearca la prima cerere dupa 24h.
+
+In afara de `gata`, primesti poza generica (masina sub husa), netaxata.
+"""

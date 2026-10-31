@@ -7,12 +7,16 @@ from typing import Any
 
 import httpx
 
-from ._intern import documente
+from ._intern import documente, produse
 from ._intern.ceas import Ceas
+from ._intern.http_sync import Http
 from ._intern.setari import PROFIL_ACTEO, SetariRetry
 from ._intern.verificari import INTERVAL_IMPLICIT_MS, TIMEOUT_IMPLICIT_MS
 from .client import ClientVehicule, ClientVerificari, _ClientSincron
 from .modele import (
+    DecodareVin,
+    ImagineMasina,
+    NumarDisponibil,
     RezultatArr,
     RezultatItp,
     RezultatRca,
@@ -22,10 +26,10 @@ from .modele import (
     VerificareInCursItp,
     VerificareInCursRca,
     VerificareInCursRovinieta,
-    WebhookDocumentExpira,
+    WebhookNotificare,
     WebhookRezultat,
-    WebhookTest,
 )
+from .tipuri import UnghiImagine
 from .webhooks import Corp, parseaza_webhook_rezultat, verifica_webhook_notificare
 
 
@@ -224,10 +228,97 @@ class ClientArr:
         return self._v._asteapta(ref, interval_ms, timeout_ms, documente.MODELE_ARR)
 
 
-class ClientAuto:
-    """Domeniul auto: documentele unei masini (RCA, ITP, rovinieta, ARR) si flota din cont."""
+class ClientVin:
+    """Decodarea seriei de sasiu (VIN). Il accesezi prin `acteo.auto.vin`. Cere un abonament de decodare VIN."""
 
-    def __init__(self, verificari: ClientVerificari, vehicule: ClientVehicule) -> None:
+    def __init__(self, http: Http) -> None:
+        self._http = http
+
+    def decodeaza(self, vin: str) -> DecodareVin:
+        """Decodeaza un VIN: marca, model, an si structura lui.
+
+        Consuma din cota doar cand marca si modelul sunt gasite (`taxat`). Arunca `EroareValidare`
+        (VIN invalid, local sau HTTP 400), `EroarePlanInactiv` (lipseste abonamentul) si
+        `EroareLimita` (`LIMIT_ATINS` sau `PLAFON_NETAXAT`: prea multe decodari fara rezultat).
+        """
+        return produse.interpreteaza_decodare(self._http.trimite(produse.cerere_decodare_vin(vin)))
+
+
+class ClientNumere:
+    """Numerele de inmatriculare disponibile, direct de la DGPCI. Il accesezi prin `acteo.auto.numere`.
+
+    Cere un abonament de numere disponibile.
+    """
+
+    def __init__(self, http: Http) -> None:
+        self._http = http
+
+    def verifica(self, numar: str) -> NumarDisponibil:
+        """Verifica la DGPCI daca un numar de inmatriculare e liber, ex: `BV07ABC`.
+
+        Raspunsul vine sincron si poate dura pana la doua minute; cererea are un timeout de cel
+        putin 150 de secunde, oricat de mic e `timeout_ms` din client. Consuma din cota doar cand
+        DGPCI da un verdict. Arunca `EroareValidare` (numar incomplet sau `NUMAR_RESPINS`),
+        `EroarePlanInactiv`, `EroareLimita` si `EroareServer` (`OCUPAT`, `INDISPONIBIL`,
+        `EROARE_DGPCI`, `TIMEOUT`; cererea nu s-a taxat).
+        """
+        return produse.interpreteaza_numar(self._http.trimite(produse.cerere_numar(numar)))
+
+
+class ClientImagini:
+    """Pozele de studio ale masinilor. Il accesezi prin `acteo.auto.imagini`. Cere un abonament de imagini masini."""
+
+    def __init__(self, http: Http, ceas: Ceas) -> None:
+        self._http = http
+        self._ceas = ceas
+
+    def obtine(
+        self, *, marca: str, model: str, an: int, unghi: UnghiImagine | None = None, umbra: bool | None = None
+    ) -> ImagineMasina:
+        """Cere poza unei masini si raspunde imediat.
+
+        Cu `status == "gata"` primesti poza reala si se taxeaza; altfel primesti poza generica
+        (masina sub husa), netaxata. La `"in-lucru"`, cere din nou dupa `retry_after_ms` sau
+        foloseste `asteapta()`. Linkul din `url` expira la `expira_la`. `unghi` implicit
+        `"trei-sferturi"`, `umbra` implicit `True`. Arunca `EroareValidare`, `EroarePlanInactiv`
+        si `EroareLimita` (`LIMIT_ATINS` sau `PLAFON_NETAXAT`).
+        """
+        cerere = produse.cerere_imagine(marca, model, an, unghi, umbra)
+        return produse.interpreteaza_imagine(self._http.trimite(cerere), self._ceas.acum_ms())
+
+    def asteapta(
+        self,
+        *,
+        marca: str,
+        model: str,
+        an: int,
+        unghi: UnghiImagine | None = None,
+        umbra: bool | None = None,
+        timeout_ms: float = produse.TIMEOUT_IMAGINE_MS,
+    ) -> ImagineMasina:
+        """Ca `obtine()`, dar cat timp poza e `"in-lucru"` o cere din nou, cu pauzele din `Retry-After`.
+
+        Pauza e de cel putin 10 secunde. Fiecare cerere intermediara e netaxata, dar intra in
+        plafonul zilnic de poze generice. Peste `timeout_ms` (implicit 2 minute) arunca
+        `EroareTimeoutVerificare`.
+        """
+        timeout_ms = produse.valideaza_timeout_imagine(timeout_ms)
+        cerere = produse.cerere_imagine(marca, model, an, unghi, umbra)
+        termen = self._ceas.monoton_ms() + timeout_ms
+        while True:
+            imagine = produse.interpreteaza_imagine(self._http.trimite(cerere), self._ceas.acum_ms())
+            if imagine.status != "in-lucru":
+                return imagine
+            pauza = produse.pauza_imagine(imagine)
+            if self._ceas.monoton_ms() + pauza > termen:
+                raise produse.eroare_timeout_imagine(timeout_ms)
+            self._ceas.dormi_ms(pauza)
+
+
+class ClientAuto:
+    """Domeniul auto: documentele unei masini (RCA, ITP, rovinieta, ARR), flota, VIN, numere si poze."""
+
+    def __init__(self, verificari: ClientVerificari, vehicule: ClientVehicule, http: Http, ceas: Ceas) -> None:
         self.rca = ClientRca(verificari)
         """Asigurarea RCA: `acteo.auto.rca.verifica("B123ABC")`."""
         self.itp = ClientItp(verificari)
@@ -238,6 +329,12 @@ class ClientAuto:
         """Copia conforma ARR: `acteo.auto.arr.verifica("B123ABC")`."""
         self.flota = vehicule
         """Vehiculele monitorizate din cont: `lista()`, `adauga()`, `sterge()`."""
+        self.vin = ClientVin(http)
+        """Decodarea VIN: `acteo.auto.vin.decodeaza("WVWZZZ1KZBW000000")`."""
+        self.numere = ClientNumere(http)
+        """Numere disponibile la DGPCI: `acteo.auto.numere.verifica("BV07ABC")`."""
+        self.imagini = ClientImagini(http, ceas)
+        """Pozele masinilor: `acteo.auto.imagini.obtine(marca=..., model=..., an=...)`."""
 
 
 class ClientWebhooks:
@@ -247,8 +344,9 @@ class ClientWebhooks:
         """Citeste rezultatul trimis la `callback_url`. Arunca `EroareWebhook`."""
         return parseaza_webhook_rezultat(corp)
 
-    def verifica_notificare(self, corp: Corp, headere: Any, cheie: str) -> WebhookDocumentExpira | WebhookTest:
-        """Verifica cheia si citeste o notificare `document.expira` sau `webhook.test`. Arunca `EroareWebhook`."""
+    def verifica_notificare(self, corp: Corp, headere: Any, cheie: str) -> WebhookNotificare:
+        """Verifica cheia si citeste o notificare (`document.expira`, evenimentele celorlalte servicii
+        sau `webhook.test`). Arunca `EroareWebhook`."""
         return verifica_webhook_notificare(corp, headere, cheie)
 
 
@@ -258,7 +356,8 @@ class Acteo(_ClientSincron):
     >>> with Acteo() as acteo:  # cheia din ACTEO_API_KEY
     ...     rca = acteo.auto.rca.verifica("B123ABC")
 
-    `acteo.auto.rca`, `.itp`, `.rovinieta`, `.arr`, `acteo.auto.flota` si `acteo.webhooks`.
+    `acteo.auto.rca`, `.itp`, `.rovinieta`, `.arr`, `acteo.auto.flota`, `.vin`, `.numere`,
+    `.imagini` si `acteo.webhooks`.
     Cheia vine din `api_key`, altfel din `ACTEO_API_KEY`, apoi din `VERIFICRCA_API_KEY`.
     `http_client` permite un `httpx.Client` propriu; SDK-ul nu il inchide. Constructorul nu
     face cereri pe retea.
@@ -287,7 +386,9 @@ class Acteo(_ClientSincron):
             ceas=_ceas,
             aleator=_aleator,
         )
-        self.auto = ClientAuto(ClientVerificari(self._http, self._ceas), ClientVehicule(self._http))
-        """Documentele unei masini si flota."""
+        self.auto = ClientAuto(
+            ClientVerificari(self._http, self._ceas), ClientVehicule(self._http), self._http, self._ceas
+        )
+        """Documentele unei masini, flota, VIN, numere si poze."""
         self.webhooks = ClientWebhooks()
         """Citirea webhook-urilor."""
