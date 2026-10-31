@@ -48,7 +48,7 @@ class VerificareFinala(Baza):
     serie_sasiu: str | None
     """VIN-ul verificat, `None` cand cautarea s-a facut doar dupa numar."""
     checked_at: AwareDatetime
-    """Cand a fost interogata sursa oficiala."""
+    """Momentul verificarii."""
     status: StatusDocument
     expires_at: AwareDatetime | None
     """Data expirarii documentului, `None` daca nu exista document valabil."""
@@ -187,6 +187,7 @@ class WebhookRezultat(Baza):
     result: VerificareFinala | None
     """Rezultatul complet, `None` la `status == "error"`."""
     checked_at: AwareDatetime | None
+    """Momentul verificarii, `None` la eroare."""
     error: str | None = None
 
 
