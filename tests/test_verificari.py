@@ -4,6 +4,7 @@ import httpx
 import pytest
 
 from acteo import (
+    EroareLimita,
     EroareRaspunsInvalid,
     EroareServer,
     EroareTimeoutVerificare,
@@ -102,7 +103,7 @@ def test_serie_sasiu_pastrata_doar_la_rovinieta() -> None:
     assert r.serie_sasiu == VIN
 
 
-def test_status_error() -> None:
+def test_status_error_pe_un_server_fara_cod() -> None:
     corp = {"tip": "itp", "query": VIN, "status": "error", "error": "RAR nu raspunde.", "hint": "Reincearca."}
     with pytest.raises(EroareVerificare) as info:
         interpreteaza(raspuns(corp), None, None, ACUM)
@@ -115,18 +116,44 @@ def test_status_error() -> None:
     assert info.value.cod_sursa is None
 
 
+@pytest.mark.parametrize("code", ["UPSTREAM_UNAVAILABLE", "UPSTREAM_TIMEOUT", "UPSTREAM_BLOCKED", "UPSTREAM_CHANGED"])
+def test_status_error_cu_code_pune_motivul_in_cod(code: str) -> None:
+    corp = {"tip": "itp", "query": VIN, "status": "error", "code": code, "error": "Sursa nu a raspuns."}
+    with pytest.raises(EroareVerificare) as info:
+        interpreteaza(raspuns(corp), None, None, ACUM)
+    assert (info.value.cod, info.value.cod_sursa) == (code, None)
+
+
 @pytest.mark.parametrize("cod", ["serie_talon_invalida", "vin_invalid", "numar_invalid"])
 def test_status_error_cu_cod_de_date_respinse(cod: str) -> None:
     corp = {
         "tip": "rovinieta",
         "query": "B123ABC",
         "status": "error",
+        "code": "INVALID_IDENTIFIER",
         "error": "Sursa a respins datele trimise.",
         "cod": cod,
     }
     with pytest.raises(EroareVerificare) as info:
         interpreteaza(raspuns(corp), VIN, None, ACUM)
-    assert (info.value.cod, info.value.cod_sursa) == ("VERIFICARE_ESUATA", cod)
+    assert (info.value.cod, info.value.cod_sursa) == ("INVALID_IDENTIFIER", cod)
+
+
+def test_status_error_cu_cod_sursa_pe_un_server_fara_code() -> None:
+    corp = {"tip": "rovinieta", "query": "B123ABC", "status": "error", "error": "Refuzat.", "cod": "vin_invalid"}
+    with pytest.raises(EroareVerificare) as info:
+        interpreteaza(raspuns(corp), VIN, None, ACUM)
+    assert (info.value.cod, info.value.cod_sursa) == ("VERIFICARE_ESUATA", "vin_invalid")
+
+
+def test_not_found_poarta_code_si_ignora_campuri_noi() -> None:
+    corp = {**FINAL, "status": "not_found", "expiresAt": None, "code": "NOT_FOUND", "campNou": {"x": 1}}
+    r = interpreteaza(raspuns(corp), None, None, ACUM)
+    assert isinstance(r, VerificareFinala)
+    assert (r.status, r.code) == (StatusDocument.NOT_FOUND, "NOT_FOUND")
+    fara = interpreteaza(raspuns(FINAL), None, None, ACUM)
+    assert isinstance(fara, VerificareFinala)
+    assert fara.code is None
 
 
 @pytest.mark.parametrize("corp", [[1], "text", None, {"status": "processing", "tip": "casco", "query": "x"}])
@@ -190,6 +217,33 @@ def test_porneste_validare_locala_fara_cerere() -> None:
     with pytest.raises(EroareValidare):
         client(server).verificari.porneste(tip="itp", query="B123ABC")
     assert server.cereri == []
+
+
+@pytest.mark.parametrize("code", ["DAILY_LIMIT_REACHED", "PLAN_LIMIT_REACHED"])
+def test_porneste_cota_atinsa_cu_cod_fara_reincercare(code: str) -> None:
+    corp = {"error": "Limita atinsa.", "code": code, "dailyUsage": "300/300", "monthlyUsage": "4000/10000"}
+    server = ServerFals(json_raspuns(429, corp))
+    with pytest.raises(EroareLimita) as info:
+        client(server).verificari.porneste(tip="rca", query="B123ABC")
+    assert (info.value.cod, info.value.utilizare_zi) == (code, "300/300")
+    assert len(server.cereri) == 1
+
+
+def test_porneste_cota_atinsa_pe_un_server_fara_cod() -> None:
+    server = ServerFals(json_raspuns(429, {"error": "Limita atinsa.", "dailyUsage": "300/300"}))
+    with pytest.raises(EroareLimita) as info:
+        client(server).verificari.porneste(tip="rca", query="B123ABC")
+    assert info.value.cod == "COTA_ATINSA"
+    assert len(server.cereri) == 1
+
+
+@pytest.mark.parametrize("code", ["UPSTREAM_BLOCKED", "UPSTREAM_CHANGED"])
+def test_porneste_sursa_oprita_503_fara_reincercare(code: str) -> None:
+    server = ServerFals(json_raspuns(503, {"error": "Sursa oprita.", "code": code}, {"Retry-After": "600"}))
+    with pytest.raises(EroareServer) as info:
+        client(server).verificari.porneste(tip="rca", query="B123ABC")
+    assert (info.value.status, info.value.cod, info.value.retry_after_ms) == (503, code, 600_000)
+    assert len(server.cereri) == 1
 
 
 def test_porneste_nu_repeta_post_la_500() -> None:

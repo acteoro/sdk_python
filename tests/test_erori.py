@@ -3,6 +3,8 @@ import pickle
 import pytest
 
 from acteo import (
+    CODURI_EROARE,
+    CodEroare,
     EroareAutentificare,
     EroareConfigurare,
     EroareConflict,
@@ -73,10 +75,10 @@ def test_campuri_specifice() -> None:
 @pytest.mark.parametrize(
     "eroare",
     [
-        EroareLimita("cota", status=429, cod="COTA_ATINSA", retry_after_ms=1000, utilizare_zi="3/3"),
+        EroareLimita("cota", status=429, cod="DAILY_LIMIT_REACHED", retry_after_ms=1000, utilizare_zi="3/3"),
         EroareRetea("retea", timeout=True, neajunsa=False),
         EroareValidare("tip", camp="tip", acceptate=["rca", "itp"]),
-        EroareVerificare("refuzat", cod="VERIFICARE_ESUATA", cod_sursa="serie_talon_invalida"),
+        EroareVerificare("refuzat", cod="INVALID_IDENTIFIER", cod_sursa="serie_talon_invalida"),
     ],
 )
 def test_erorile_trec_prin_pickle(eroare: VerificRcaError) -> None:
@@ -96,5 +98,30 @@ def test_enumuri() -> None:
     assert [t.value for t in TipVerificare] == ["rca", "itp", "rovinieta", "arr"]
     assert [s.value for s in StatusDocument] == ["valid", "warning", "expired", "not_found"]
     assert [s.value for s in StatusWebhook] == ["valid", "warning", "expired", "not_found", "error"]
+    assert CODURI_EROARE == (
+        "UPSTREAM_UNAVAILABLE",
+        "UPSTREAM_TIMEOUT",
+        "UPSTREAM_BLOCKED",
+        "UPSTREAM_CHANGED",
+        "DAILY_LIMIT_REACHED",
+        "PLAN_LIMIT_REACHED",
+        "NOT_FOUND",
+        "INVALID_IDENTIFIER",
+        "SOLD_INSUFICIENT",
+        "PLAFON_NETAXAT",
+        "OCUPAT",
+        "INDISPONIBIL",
+        "VIN_NEDECODAT",
+        "VIN_INVALID",
+        "ARR_NECESITA_PLAN",
+        "LIMIT_ATINS",
+        "VEHICUL_EXISTENT",
+        "NEGASIT",
+        "LIMITA_FLOTA_ATINSA",
+    )
+    assert [c.value for c in CodEroare] == list(CODURI_EROARE)
+    assert CodEroare.DAILY_LIMIT_REACHED == "DAILY_LIMIT_REACHED"
+    assert EroareLimita("m", cod="DAILY_LIMIT_REACHED").cod == CodEroare.DAILY_LIMIT_REACHED
+    assert EroareServer("m", cod="UN_COD_NOU").cod == "UN_COD_NOU"
     assert TipVerificare("rca") is TipVerificare.RCA
     assert isinstance(TipVerificare.RCA, str)

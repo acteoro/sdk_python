@@ -143,10 +143,10 @@ def test_numere_accepta_bucuresti_cu_trei_cifre() -> None:
 
 
 def test_numar_respins_422_e_eroare_validare() -> None:
-    server = ServerFals(json_raspuns(422, {"error": "Respins", "code": "NUMAR_RESPINS"}))
+    server = ServerFals(json_raspuns(422, {"error": "Respins", "code": "INVALID_IDENTIFIER"}))
     with pytest.raises(EroareValidare) as info:
         client(server).auto.numere.verifica("BV07ABC")
-    assert (info.value.cod, info.value.status) == ("NUMAR_RESPINS", 422)
+    assert (info.value.cod, info.value.status) == ("INVALID_IDENTIFIER", 422)
 
 
 def test_numere_reincearca_ocupat_dupa_retry_after() -> None:
@@ -169,7 +169,16 @@ def test_numere_nu_reincearca_ocupat_cu_retry_after_peste_plafon() -> None:
     assert len(server.cereri) == 1
 
 
-@pytest.mark.parametrize(("status", "cod"), [(504, "TIMEOUT"), (502, "EROARE_DGPCI"), (503, "INDISPONIBIL")])
+@pytest.mark.parametrize(
+    ("status", "cod"),
+    [
+        (504, "UPSTREAM_TIMEOUT"),
+        (502, "UPSTREAM_UNAVAILABLE"),
+        (503, "UPSTREAM_BLOCKED"),
+        (503, "UPSTREAM_CHANGED"),
+        (503, "INDISPONIBIL"),
+    ],
+)
 def test_numere_nu_repeta_5xx_cu_cod(status: int, cod: str) -> None:
     server = ServerFals(json_raspuns(status, {"error": "x", "code": cod}))
     with pytest.raises(EroareServer) as info:

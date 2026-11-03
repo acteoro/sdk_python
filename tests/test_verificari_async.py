@@ -5,6 +5,8 @@ import pytest
 
 from acteo import (
     AsyncVerificRca,
+    EroareLimita,
+    EroareServer,
     EroareTimeoutVerificare,
     EroareValidare,
     EroareVerificare,
@@ -62,7 +64,7 @@ async def test_rovinieta_cu_serie_talon() -> None:
         await client(ServerFals()).verificari.porneste(tip="rovinieta", query="B123ABC", serie_sasiu=vin)
 
 
-async def test_status_error_cu_cod_sursa() -> None:
+async def test_status_error_cu_cod_sursa_pe_un_server_fara_code() -> None:
     corp = {"tip": "rovinieta", "query": "B123ABC", "status": "error", "error": "Refuzat.", "cod": "numar_invalid"}
     server = ServerFals(json_raspuns(200, corp))
     with pytest.raises(EroareVerificare) as info:
@@ -70,6 +72,65 @@ async def test_status_error_cu_cod_sursa() -> None:
             tip="rovinieta", query="B123ABC", serie_sasiu="WVWZZZ1JZXW000001", serie_talon="I00639603F"
         )
     assert (info.value.cod, info.value.cod_sursa) == ("VERIFICARE_ESUATA", "numar_invalid")
+
+
+async def test_status_error_cu_code_si_cod_sursa() -> None:
+    corp = {
+        "tip": "rovinieta",
+        "query": "B123ABC",
+        "status": "error",
+        "code": "INVALID_IDENTIFIER",
+        "error": "Refuzat.",
+        "cod": "numar_invalid",
+    }
+    server = ServerFals(json_raspuns(200, corp))
+    with pytest.raises(EroareVerificare) as info:
+        await client(server).verificari.porneste(
+            tip="rovinieta", query="B123ABC", serie_sasiu="WVWZZZ1JZXW000001", serie_talon="I00639603F"
+        )
+    assert (info.value.cod, info.value.cod_sursa) == ("INVALID_IDENTIFIER", "numar_invalid")
+
+
+async def test_rezultat_status_error_cu_code() -> None:
+    corp = {**IN_CURS, "status": "error", "code": "UPSTREAM_TIMEOUT", "error": "Sursa nu a raspuns."}
+    server = ServerFals(json_raspuns(200, corp))
+    ref = ReferintaVerificare(tip="itp", query="WVWZZZ1JZXW000001")
+    with pytest.raises(EroareVerificare) as info:
+        await client(server).verificari.rezultat(ref)
+    assert (info.value.cod, info.value.cod_sursa) == ("UPSTREAM_TIMEOUT", None)
+
+
+async def test_rezultat_not_found_poarta_code() -> None:
+    corp = {**FINAL, "status": "not_found", "expiresAt": None, "code": "NOT_FOUND", "campNou": True}
+    server = ServerFals(json_raspuns(200, corp))
+    r = await client(server).verificari.rezultat(ReferintaVerificare(tip="itp", query="WVWZZZ1JZXW000001"))
+    assert (r.status, getattr(r, "code", None)) == (StatusDocument.NOT_FOUND, "NOT_FOUND")
+
+
+@pytest.mark.parametrize("code", ["DAILY_LIMIT_REACHED", "PLAN_LIMIT_REACHED"])
+async def test_porneste_cota_atinsa_cu_cod_fara_reincercare(code: str) -> None:
+    server = ServerFals(json_raspuns(429, {"error": "Limita atinsa.", "code": code}))
+    with pytest.raises(EroareLimita) as info:
+        await client(server).verificari.porneste(tip="itp", query="WVWZZZ1JZXW000001")
+    assert info.value.cod == code
+    assert len(server.cereri) == 1
+
+
+async def test_porneste_cota_atinsa_pe_un_server_fara_cod() -> None:
+    server = ServerFals(json_raspuns(429, {"error": "Limita atinsa.", "monthlyUsage": "10000/10000"}))
+    with pytest.raises(EroareLimita) as info:
+        await client(server).verificari.porneste(tip="itp", query="WVWZZZ1JZXW000001")
+    assert info.value.cod == "COTA_ATINSA"
+    assert len(server.cereri) == 1
+
+
+async def test_porneste_sursa_oprita_503_fara_reincercare() -> None:
+    corp = {"error": "Sursa oprita.", "code": "UPSTREAM_BLOCKED"}
+    server = ServerFals(json_raspuns(503, corp, {"Retry-After": "600"}))
+    with pytest.raises(EroareServer) as info:
+        await client(server).verificari.porneste(tip="itp", query="WVWZZZ1JZXW000001")
+    assert (info.value.cod, info.value.retry_after_ms) == ("UPSTREAM_BLOCKED", 600_000)
+    assert len(server.cereri) == 1
 
 
 async def test_validare_locala() -> None:

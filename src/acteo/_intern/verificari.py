@@ -54,8 +54,11 @@ class _CorpEsuat(Baza):
     tip: TipVerificare
     query: str
     status: Literal["error"]
+    code: str | None = None
+    """Motivul (`CodEsecVerificare`). Lipseste doar la serverele mai vechi."""
     error: str
     cod: str | None = None
+    """Doar la `INVALID_IDENTIFIER`: campul refuzat."""
     hint: str | None = None
 
 
@@ -129,9 +132,14 @@ def interpreteaza_ca(
     status = r.corp.get("status") if isinstance(r.corp, dict) else None
     if status == "error":
         esuat = decodeaza(_CorpEsuat, r)
-        # `cod` din raspuns vine doar cand sursa a refuzat datele; il expunem ca `cod_sursa`.
+        # `code` e motivul; serverele mai vechi nu il trimit, atunci ramane codul local.
+        # `cod` vine doar cand sursa a refuzat datele; il expunem ca `cod_sursa`.
         raise EroareVerificare(
-            esuat.error, cod=COD_VERIFICARE_ESUATA, hint=esuat.hint, raspuns=r.corp, cod_sursa=esuat.cod
+            esuat.error,
+            cod=esuat.code or COD_VERIFICARE_ESUATA,
+            hint=esuat.hint,
+            raspuns=r.corp,
+            cod_sursa=esuat.cod,
         )
     if status == "processing":
         c = decodeaza(_CorpInCurs, r)

@@ -94,7 +94,16 @@ from .modele import (
     WebhookTermenExpira,
     WebhookTest,
 )
-from .tipuri import StatusDocument, StatusImagine, StatusWebhook, TipVerificare, UnghiImagine
+from .tipuri import (
+    CODURI_EROARE,
+    CodEroare,
+    CodEsecVerificare,
+    StatusDocument,
+    StatusImagine,
+    StatusWebhook,
+    TipVerificare,
+    UnghiImagine,
+)
 from .validare import (
     TIPURI_VERIFICARE,
     UNGHIURI_IMAGINE,
@@ -107,6 +116,7 @@ from .validare import (
 from .webhooks import HEADER_CHEIE, HEADER_EVENIMENT, parseaza_webhook_rezultat, verifica_webhook_notificare
 
 __all__ = [
+    "CODURI_EROARE",
     "HEADER_CHEIE",
     "HEADER_EVENIMENT",
     "TIPURI_VERIFICARE",
@@ -139,6 +149,8 @@ __all__ = [
     "ClientVerificari",
     "ClientVin",
     "ClientWebhooks",
+    "CodEroare",
+    "CodEsecVerificare",
     "Cota",
     "DecodareVin",
     "DosarFirma",

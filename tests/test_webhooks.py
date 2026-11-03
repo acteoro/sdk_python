@@ -187,7 +187,31 @@ def test_rezultat_valid() -> None:
 def test_rezultat_cu_eroare() -> None:
     corp = {**REZULTAT, "status": "error", "result": None, "checkedAt": None, "error": "Sursa nu raspunde."}
     r = parseaza_webhook_rezultat(corp)
-    assert (r.status, r.result, r.error) == (StatusWebhook.ERROR, None, "Sursa nu raspunde.")
+    assert (r.status, r.result, r.error, r.code) == (StatusWebhook.ERROR, None, "Sursa nu raspunde.", None)
+
+
+def test_rezultat_cu_eroare_poarta_code() -> None:
+    corp = {
+        **REZULTAT,
+        "status": "error",
+        "result": None,
+        "checkedAt": None,
+        "error": "Sursa oficiala nu a raspuns in timpul maxim.",
+        "code": "UPSTREAM_TIMEOUT",
+    }
+    r = parseaza_webhook_rezultat(corp)
+    assert (r.status, r.code) == (StatusWebhook.ERROR, "UPSTREAM_TIMEOUT")
+
+
+def test_rezultat_not_found_poarta_code_si_ignora_campuri_noi() -> None:
+    initial = REZULTAT["result"]
+    assert isinstance(initial, dict)
+    rezultat = {**initial, "status": "not_found", "expiresAt": None, "code": "NOT_FOUND"}
+    corp = {**REZULTAT, "status": "not_found", "result": rezultat, "code": "NOT_FOUND", "campNou": 1}
+    r = parseaza_webhook_rezultat(corp)
+    assert (r.status, r.code) == (StatusWebhook.NOT_FOUND, "NOT_FOUND")
+    assert r.result is not None
+    assert r.result.code == "NOT_FOUND"
 
 
 def test_rezultat_invalid() -> None:

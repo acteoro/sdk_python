@@ -52,6 +52,8 @@ class VerificareFinala(Baza):
     status: StatusDocument
     expires_at: AwareDatetime | None
     """Data expirarii documentului, `None` daca nu exista document valabil."""
+    code: str | None = None
+    """Doar la `status == "not_found"`: `"NOT_FOUND"`, identificatorul nu exista la sursa oficiala."""
     request_id: str | None = None
     """Prezent doar cand ai trimis `callback_url`. Apare si in webhook."""
     hint: str | None = None
@@ -189,6 +191,9 @@ class WebhookRezultat(Baza):
     checked_at: AwareDatetime | None
     """Momentul verificarii, `None` la eroare."""
     error: str | None = None
+    """Mesajul de eroare, doar la `status == "error"`."""
+    code: str | None = None
+    """La `status == "error"`, motivul (`CodEsecVerificare`); la `status == "not_found"`, `"NOT_FOUND"`."""
 
 
 class WebhookDocumentExpira(Baza):

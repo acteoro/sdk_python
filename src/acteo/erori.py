@@ -7,8 +7,10 @@ class VerificRcaError(Exception):
     """Baza tuturor erorilor SDK-ului.
 
     Atribute: `mesaj` (in romana, exact cum vine de la API cand exista), `status` (HTTP),
-    `cod` (ex: `LIMIT_ATINS`, `VEHICUL_EXISTENT`), `hint` (cum se rezolva), `raspuns`
-    (corpul brut, pentru depanare). Eroarea originala, cand exista, e in `__cause__`.
+    `cod` (de la API vine unul din `CodEroare`, ex: `DAILY_LIMIT_REACHED`, `UPSTREAM_TIMEOUT`,
+    `VEHICUL_EXISTENT`; SDK-ul pune singur cateva coduri locale: `VALIDARE_LOCALA`,
+    `TIMEOUT_VERIFICARE`, `PREA_MULTE_CERERI`), `hint` (cum se rezolva), `raspuns` (corpul brut,
+    pentru depanare). Eroarea originala, cand exista, e in `__cause__`.
     """
 
     def __init__(
@@ -41,7 +43,7 @@ class EroareConfigurare(VerificRcaError):
 
 class EroareValidare(VerificRcaError):
     """Datele trimise sunt invalide: local, inainte de orice cerere (nu consuma din cota), 400 de la API
-    sau 422 cand sursa oficiala refuza valoarea (ex: `NUMAR_RESPINS` la numerele disponibile)."""
+    sau 422 cand sursa oficiala refuza valoarea (`INVALID_IDENTIFIER` la numerele disponibile)."""
 
     def __init__(
         self,
@@ -95,9 +97,14 @@ class EroareConflict(VerificRcaError):
 class EroareLimita(VerificRcaError):
     """429: limita a fost atinsa. `cod` spune care.
 
-    - `COTA_ATINSA`: cota zilnica sau lunara de verificari a planului;
+    - `DAILY_LIMIT_REACHED`: limita zilnica a planului; se reseteaza la miezul noptii, ora Romaniei,
+      iar `retry_after_ms` spune cat mai e;
+    - `PLAN_LIMIT_REACHED`: limita lunara, sau plafonul consumului peste plan;
+    - `SOLD_INSUFICIENT`: soldul preplatit nu acopera cererile peste plan;
+    - `PLAFON_NETAXAT`: prea multe raspunsuri netaxate azi (decodari, poze generice);
     - `LIMITA_FLOTA_ATINSA`: plafonul zilnic de adaugari/stergeri de vehicule;
-    - `PREA_MULTE_CERERI`: polling prea des (SDK-ul reincearca singur).
+    - `PREA_MULTE_CERERI`: polling prea des (SDK-ul reincearca singur);
+    - `COTA_ATINSA`: cota atinsa, de la un server mai vechi care nu trimite cod.
     """
 
     def __init__(
@@ -119,10 +126,15 @@ class EroareLimita(VerificRcaError):
 
 
 class EroareServer(VerificRcaError):
-    """5xx: eroare pe serverul API-ului. Cererile sigure se reincearca automat.
+    """5xx: eroare pe serverul API-ului sau la sursa oficiala. Cererile sigure se reincearca automat.
 
-    La numerele disponibile, `cod` spune de ce: `OCUPAT`, `INDISPONIBIL`, `EROARE_DGPCI` sau
-    `TIMEOUT`; cererea nu s-a taxat. `retry_after_ms` vine din headerul `Retry-After`.
+    Cand `cod` exista, cererea nu s-a taxat:
+
+    - `UPSTREAM_UNAVAILABLE` (502), `UPSTREAM_TIMEOUT` (504): sursa oficiala nu a raspuns;
+    - `UPSTREAM_BLOCKED`, `UPSTREAM_CHANGED` (503): sursa e oprita temporar, reia dupa `retry_after_ms`;
+    - `OCUPAT`, `INDISPONIBIL` (503): verificarea nu poate porni acum.
+
+    `retry_after_ms` vine din headerul `Retry-After`.
     """
 
     def __init__(
@@ -171,12 +183,15 @@ class EroareRaspunsInvalid(VerificRcaError):
 
 
 class EroareVerificare(VerificRcaError):
-    """Verificarea s-a incheiat cu `status: error`. `cod` e mereu `VERIFICARE_ESUATA`.
+    """Verificarea s-a incheiat cu `status: error`. `cod` spune de ce (vezi `CodEsecVerificare`):
 
-    `cod_sursa` spune de ce, cand sursa oficiala a refuzat datele trimise:
-    `serie_talon_invalida`, `vin_invalid` sau `numar_invalid`. Atunci o reincercare cu aceleasi
-    date nu ajuta; corecteaza campul respectiv. Cand `cod_sursa` e `None`, sursa nu a raspuns
-    in timp util si verificarea poate fi reluata.
+    - `INVALID_IDENTIFIER`: sursa a refuzat datele trimise, iar `cod_sursa` spune ce camp e gresit
+      (`serie_talon_invalida`, `vin_invalid`, `numar_invalid`). O reincercare cu aceleasi date nu
+      ajuta; corecteaza campul intai;
+    - `UPSTREAM_UNAVAILABLE`, `UPSTREAM_TIMEOUT`, `UPSTREAM_BLOCKED`, `UPSTREAM_CHANGED`: sursa
+      oficiala nu a dat un raspuns; reia mai tarziu cu o cerere noua.
+
+    Un server mai vechi, fara cod, da `cod == "VERIFICARE_ESUATA"`.
     """
 
     def __init__(

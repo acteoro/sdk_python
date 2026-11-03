@@ -52,19 +52,20 @@ async def test_numere_cu_timeout_minim_si_ocupat_reincercat() -> None:
     assert server.cereri[1].extensions["timeout"]["read"] == 150.0
 
 
-async def test_numere_nu_repeta_5xx_cu_cod() -> None:
-    server = ServerFals(json_raspuns(504, {"error": "x", "code": "TIMEOUT"}))
+@pytest.mark.parametrize(("status", "cod"), [(504, "UPSTREAM_TIMEOUT"), (503, "UPSTREAM_BLOCKED")])
+async def test_numere_nu_repeta_5xx_cu_cod(status: int, cod: str) -> None:
+    server = ServerFals(json_raspuns(status, {"error": "x", "code": cod}, {"Retry-After": "600"}))
     with pytest.raises(EroareServer) as info:
         await client(server).auto.numere.verifica("BV07ABC")
-    assert info.value.cod == "TIMEOUT"
+    assert (info.value.cod, info.value.retry_after_ms) == (cod, 600_000)
     assert len(server.cereri) == 1
 
 
 async def test_numere_respins_422() -> None:
-    server = ServerFals(json_raspuns(422, {"error": "Respins", "code": "NUMAR_RESPINS"}))
+    server = ServerFals(json_raspuns(422, {"error": "Respins", "code": "INVALID_IDENTIFIER"}))
     with pytest.raises(EroareValidare) as info:
         await client(server).auto.numere.verifica("BV07ABC")
-    assert info.value.cod == "NUMAR_RESPINS"
+    assert info.value.cod == "INVALID_IDENTIFIER"
 
 
 async def test_obtine_si_in_lucru() -> None:

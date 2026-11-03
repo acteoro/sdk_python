@@ -52,7 +52,13 @@ class AsyncClientVerificari:
         serie_talon: str | None = None,
         callback_url: str | None = None,
     ) -> VerificareFinala | VerificareInCurs:
-        """Porneste o verificare (POST). Consuma o unitate din cota."""
+        """Porneste o verificare (POST). Consuma o unitate din cota.
+
+        Arunca `EroareLimita` cand cota e atinsa (`DAILY_LIMIT_REACHED`, `PLAN_LIMIT_REACHED`),
+        `EroareServer` cand sursa oficiala e oprita temporar (`UPSTREAM_BLOCKED`, `UPSTREAM_CHANGED`;
+        netaxat, nu se repeta singura) si `EroareVerificare` cand verificarea se incheie cu eroare
+        (motivul e in `cod`).
+        """
         tinta = valideaza_cerere_verificare(tip, query, serie_sasiu, callback_url, serie_talon)
         return await self._porneste(tinta, MODELE_GENERICE)
 

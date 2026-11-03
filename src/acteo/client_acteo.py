@@ -239,7 +239,8 @@ class ClientVin:
 
         Consuma din cota doar cand marca si modelul sunt gasite (`taxat`). Arunca `EroareValidare`
         (VIN invalid, local sau HTTP 400), `EroarePlanInactiv` (lipseste abonamentul) si
-        `EroareLimita` (`LIMIT_ATINS` sau `PLAFON_NETAXAT`: prea multe decodari fara rezultat).
+        `EroareLimita` (`DAILY_LIMIT_REACHED`, `PLAN_LIMIT_REACHED` sau `PLAFON_NETAXAT`: prea multe
+        decodari fara rezultat).
         """
         return produse.interpreteaza_decodare(self._http.trimite(produse.cerere_decodare_vin(vin)))
 
@@ -258,9 +259,9 @@ class ClientNumere:
 
         Raspunsul vine sincron si poate dura pana la doua minute; cererea are un timeout de cel
         putin 150 de secunde, oricat de mic e `timeout_ms` din client. Consuma din cota doar cand
-        DGPCI da un verdict. Arunca `EroareValidare` (numar incomplet sau `NUMAR_RESPINS`),
-        `EroarePlanInactiv`, `EroareLimita` si `EroareServer` (`OCUPAT`, `INDISPONIBIL`,
-        `EROARE_DGPCI`, `TIMEOUT`; cererea nu s-a taxat).
+        DGPCI da un verdict. Arunca `EroareValidare` (numar incomplet sau `INVALID_IDENTIFIER`),
+        `EroarePlanInactiv`, `EroareLimita` si `EroareServer` (`UPSTREAM_UNAVAILABLE`, `UPSTREAM_TIMEOUT`,
+        `UPSTREAM_BLOCKED`, `UPSTREAM_CHANGED`, `OCUPAT` sau `INDISPONIBIL`; cererea nu s-a taxat).
         """
         return produse.interpreteaza_numar(self._http.trimite(produse.cerere_numar(numar)))
 
@@ -281,7 +282,7 @@ class ClientImagini:
         (masina sub husa), netaxata. La `"in-lucru"`, cere din nou dupa `retry_after_ms` sau
         foloseste `asteapta()`. Linkul din `url` expira la `expira_la`. `unghi` implicit
         `"trei-sferturi"`, `umbra` implicit `True`. Arunca `EroareValidare`, `EroarePlanInactiv`
-        si `EroareLimita` (`LIMIT_ATINS` sau `PLAFON_NETAXAT`).
+        si `EroareLimita` (`DAILY_LIMIT_REACHED`, `PLAN_LIMIT_REACHED` sau `PLAFON_NETAXAT`).
         """
         cerere = produse.cerere_imagine(marca, model, an, unghi, umbra)
         return produse.interpreteaza_imagine(self._http.trimite(cerere), self._ceas.acum_ms())

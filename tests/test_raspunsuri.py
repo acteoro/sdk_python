@@ -101,7 +101,27 @@ def test_403_cu_limita() -> None:
     assert e.limita == 5
 
 
-def test_429_cota() -> None:
+def test_429_limita_zilnica_cu_retry_after() -> None:
+    corp = {"error": "Cota", "code": "DAILY_LIMIT_REACHED", "dailyUsage": "300/300"}
+    e = eroare_din_raspuns(429, {"retry-after": "3600"}, corp, ACUM)
+    assert isinstance(e, EroareLimita)
+    assert (e.cod, e.retry_after_ms, e.utilizare_zi) == ("DAILY_LIMIT_REACHED", 3_600_000, "300/300")
+
+
+def test_429_limita_planului_fara_retry_after() -> None:
+    corp = {"error": "Cota", "code": "PLAN_LIMIT_REACHED", "monthlyUsage": "10000/10000"}
+    e = eroare_din_raspuns(429, {}, corp, ACUM)
+    assert isinstance(e, EroareLimita)
+    assert (e.cod, e.retry_after_ms, e.utilizare_luna) == ("PLAN_LIMIT_REACHED", None, "10000/10000")
+
+
+def test_503_sursa_oprita_e_eroare_server_cu_retry_after() -> None:
+    e = eroare_din_raspuns(503, {"retry-after": "600"}, {"error": "Oprit", "code": "UPSTREAM_CHANGED"}, ACUM)
+    assert isinstance(e, EroareServer)
+    assert (e.status, e.cod, e.retry_after_ms) == (503, "UPSTREAM_CHANGED", 600_000)
+
+
+def test_429_cota_pe_un_server_fara_cod() -> None:
     e = eroare_din_raspuns(429, {"retry-after": "30"}, {"error": "Cota", "dailyUsage": "300/300"}, ACUM)
     assert isinstance(e, EroareLimita)
     assert (e.cod, e.retry_after_ms, e.utilizare_zi, e.utilizare_luna) == ("COTA_ATINSA", 30_000, "300/300", None)

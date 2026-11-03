@@ -100,7 +100,16 @@ def test_throttle_respecta_retry_after() -> None:
     assert ceas.somnuri == [3000]
 
 
-def test_cota_atinsa_nu_se_repeta() -> None:
+@pytest.mark.parametrize("cod", ["DAILY_LIMIT_REACHED", "PLAN_LIMIT_REACHED"])
+def test_cota_atinsa_cu_cod_nu_se_repeta(cod: str) -> None:
+    server = ServerFals(json_raspuns(429, {"error": "Cota", "code": cod, "dailyUsage": "3/3"}, {"Retry-After": "1"}))
+    with pytest.raises(EroareLimita) as info:
+        http(server).trimite(GET)
+    assert info.value.cod == cod
+    assert len(server.cereri) == 1
+
+
+def test_cota_atinsa_pe_un_server_fara_cod_nu_se_repeta() -> None:
     server = ServerFals(json_raspuns(429, {"error": "Cota", "dailyUsage": "3/3"}, {"Retry-After": "1"}))
     with pytest.raises(EroareLimita) as info:
         http(server).trimite(GET)

@@ -117,7 +117,7 @@ rovinieta = acteo.auto.rovinieta.verifica(
 print(rovinieta.status.value, rovinieta.expires_at)
 ```
 
-Dacă sursa respinge datele (de exemplu, numărul talonului nu corespunde mașinii), primești `EroareVerificare` cu `cod_sursa` `"serie_talon_invalida"`. O reîncercare cu aceleași date nu ajută; corectează întâi câmpul indicat:
+Dacă sursa respinge datele (de exemplu, numărul talonului nu corespunde mașinii), primești `EroareVerificare` cu `cod` `"INVALID_IDENTIFIER"` și `cod_sursa` `"serie_talon_invalida"`. O reîncercare cu aceleași date nu ajută; corectează întâi câmpul indicat:
 
 ```python
 from acteo import EroareVerificare
@@ -236,11 +236,21 @@ Rezultatul final are `status` de tip `StatusDocument`:
 | `StatusDocument.VALID` (`"valid"`) | Document valabil | data expirării |
 | `StatusDocument.WARNING` (`"warning"`) | Expiră curând: RCA în 14 zile, ITP în 30, rovinietă în 7, ARR în 14 | data expirării |
 | `StatusDocument.EXPIRED` (`"expired"`) | Expirat sau inexistent, confirmat de sursă | data expirării sau `None` |
-| `StatusDocument.NOT_FOUND` (`"not_found"`) | Sursa nu a găsit vehiculul | `None` |
+| `StatusDocument.NOT_FOUND` (`"not_found"`) | Sursa nu a găsit vehiculul (`code == "NOT_FOUND"`) | `None` |
 
 O verificare încă în curs e un obiect `VerificareInCurs`, nu un rezultat. Le deosebești cu `isinstance()`.
 
-Când verificarea se încheie cu eroare, SDK-ul aruncă `EroareVerificare` (`cod` e mereu `VERIFICARE_ESUATA`). Dacă sursa oficială doar nu a răspuns, `cod_sursa` e `None` și poți relua cererea. Dacă sursa a refuzat datele trimise, `cod_sursa` spune ce e greșit și reîncercarea nu ajută până nu corectezi câmpul:
+Când verificarea se încheie cu eroare, SDK-ul aruncă `EroareVerificare`, iar `cod` spune de ce:
+
+| `cod` | Ce s-a întâmplat | Ce faci |
+|---|---|---|
+| `INVALID_IDENTIFIER` | Sursa a refuzat datele trimise; câmpul e în `cod_sursa` | corectezi câmpul, reîncercarea nu ajută |
+| `UPSTREAM_UNAVAILABLE` | Sursa oficială nu răspunde sau a răspuns cu eroare | reiei mai târziu |
+| `UPSTREAM_TIMEOUT` | Sursa oficială nu a răspuns în timpul maxim | reiei mai târziu |
+| `UPSTREAM_BLOCKED` | Accesul la sursa oficială e restricționat temporar | reiei mai târziu |
+| `UPSTREAM_CHANGED` | Sursa și-a schimbat structura, adaptăm serviciul | reiei mai târziu |
+
+Doar `INVALID_IDENTIFIER` se taxează, pentru că sursa a răspuns. Valorile lui `cod_sursa`:
 
 | `cod_sursa` | Câmpul de corectat |
 |---|---|
@@ -343,7 +353,7 @@ Decodează o serie de șasiu. Întoarce `DecodareVin` cu `marca`, `model`, `an_f
 
 ### `auto.numere.verifica(numar)`
 
-Verifică la DGPCI un singur număr complet: indicativul județului, cifrele și trei litere (`BV07ABC`, `B123ABC`). Numerele incomplete sau cu `?` și `*` sunt respinse local. Întoarce `NumarDisponibil` cu `numar` (normalizat), `disponibil` și `mesaj` (textul DGPCI, sau `None`). Dacă DGPCI nu acceptă numărul primești `EroareValidare` cu `cod` `"NUMAR_RESPINS"`. Când verificarea nu poate rula primești `EroareServer` cu `cod` `OCUPAT`, `INDISPONIBIL`, `EROARE_DGPCI` sau `TIMEOUT`. Niciuna nu se taxează, iar `OCUPAT` se reîncearcă singur după `Retry-After`. Cere un abonament de numere disponibile.
+Verifică la DGPCI un singur număr complet: indicativul județului, cifrele și trei litere (`BV07ABC`, `B123ABC`). Numerele incomplete sau cu `?` și `*` sunt respinse local. Întoarce `NumarDisponibil` cu `numar` (normalizat), `disponibil` și `mesaj` (textul DGPCI, sau `None`). Dacă DGPCI nu acceptă numărul primești `EroareValidare` cu `cod` `"INVALID_IDENTIFIER"`. Când verificarea nu poate rula primești `EroareServer` cu `cod` `UPSTREAM_UNAVAILABLE`, `UPSTREAM_TIMEOUT`, `UPSTREAM_BLOCKED`, `UPSTREAM_CHANGED`, `OCUPAT` sau `INDISPONIBIL`. Niciuna nu se taxează, iar `OCUPAT` se reîncearcă singur după `Retry-After`. Cere un abonament de numere disponibile.
 
 ### `auto.imagini.obtine(*, marca, model, an, unghi=None, umbra=None)`
 
@@ -378,6 +388,7 @@ Le poți folosi în formularele tale (de exemplu într-un validator Django sau P
 | Constantă | Valoare |
 |---|---|
 | `TIPURI_VERIFICARE` | `TipVerificare.RCA`, `ITP`, `ROVINIETA`, `ARR`, util pentru dropdown-uri și validare |
+| `CODURI_EROARE` | toate codurile de eroare trimise de API, ca texte; aceleași valori sunt în enum-ul `CodEroare` |
 | `UNGHIURI_IMAGINE` | unghiurile acceptate de `auto.imagini` |
 | `HEADER_CHEIE` | `"x-acteo-key"`, headerul cu cheia de webhook |
 | `HEADER_EVENIMENT` | `"x-acteo-event"`, headerul cu numele evenimentului |
@@ -394,7 +405,7 @@ API-ul trimite două feluri de webhook. SDK-ul le validează strict și îți d�
 
 ### Rezultatul unei verificări (`callback_url`)
 
-Când trimiți `callback_url` la `porneste()`, primești un POST cu rezultatul imediat ce e gata. Dacă sursa nu răspunde, primești `status` `StatusWebhook.ERROR`.
+Când trimiți `callback_url` la `porneste()`, primești un POST cu rezultatul imediat ce e gata. Dacă sursa nu răspunde, primești `status` `StatusWebhook.ERROR`, cu motivul în `code` (aceleași valori ca la `EroareVerificare`). La `StatusWebhook.NOT_FOUND`, `code` e `"NOT_FOUND"`.
 
 ```python
 from fastapi import FastAPI, Request
@@ -541,21 +552,40 @@ Excepțiile SDK-ului trec prin `pickle` cu toate atributele, deci apar corect ș
 
 Toate excepțiile moștenesc `ActeoError`, care moștenește `Exception`. Fiecare are `mesaj` (în română, la fel ca `str(e)`), plus atributele `status`, `cod`, `hint` și `raspuns` când vin de la API. Eroarea originală (de rețea, de decodare) e în `__cause__`.
 
+### Coduri de eroare
+
+`cod` are o valoare stabilă, bună de tratat în program. Lista completă e exportată ca `CODURI_EROARE`, iar enum-ul e `CodEroare` (un `str`, deci `e.cod == CodEroare.DAILY_LIMIT_REACHED` merge direct). `cod` rămâne un `str` obișnuit, ca un cod nou de la API să nu strice nimic. Primele opt sunt cele din contract:
+
+| `cod` | Unde apare | Înseamnă |
+|---|---|---|
+| `UPSTREAM_UNAVAILABLE` | `EroareVerificare`, `EroareServer` 502 | Sursa oficială nu răspunde sau răspunde cu eroare |
+| `UPSTREAM_TIMEOUT` | `EroareVerificare`, `EroareServer` 504 | Sursa oficială nu a răspuns în intervalul maxim |
+| `UPSTREAM_BLOCKED` | `EroareVerificare`, `EroareServer` 503 | Accesul la sursa oficială e restricționat temporar |
+| `UPSTREAM_CHANGED` | `EroareVerificare`, `EroareServer` 503 | Structura sursei s-a modificat, serviciul e în adaptare |
+| `DAILY_LIMIT_REACHED` | `EroareLimita` 429 | Limita zilnică a planului, se resetează la miezul nopții (ora României) |
+| `PLAN_LIMIT_REACHED` | `EroareLimita` 429 | Limita lunară, sau plafonul consumului peste plan |
+| `NOT_FOUND` | `code` pe rezultatul `not_found` | Identificatorul nu există la sursa oficială |
+| `INVALID_IDENTIFIER` | `EroareVerificare`, `EroareValidare` 422 | Sursa oficială a respins identificatorul |
+
+Restul țin de un produs: `SOLD_INSUFICIENT`, `PLAFON_NETAXAT`, `OCUPAT`, `INDISPONIBIL`, `VIN_NEDECODAT`, `VIN_INVALID`, `ARR_NECESITA_PLAN`, `LIMIT_ATINS` (numărul de mașini din plan), `VEHICUL_EXISTENT`, `NEGASIT`, `LIMITA_FLOTA_ATINSA`.
+
+### Clasele de eroare
+
 | Clasă | Când apare | Câmpuri utile |
 |---|---|---|
 | `EroareConfigurare` | Cheie lipsă sau opțiuni invalide | `hint` |
-| `EroareValidare` | Date greșite, local sau HTTP 400; 422 când DGPCI refuză numărul (`NUMAR_RESPINS`) | `camp`, `acceptate`, `cod` |
+| `EroareValidare` | Date greșite, local sau HTTP 400; 422 când DGPCI refuză numărul (`INVALID_IDENTIFIER`) | `camp`, `acceptate`, `cod` |
 | `EroareAutentificare` | 401: cheie invalidă sau dezactivată | `hint` |
 | `EroarePlanInactiv` | 402: fără abonament activ | `hint` |
 | `EroareInterzis` | 403: `LIMIT_ATINS`, `ARR_NECESITA_PLAN` | `cod`, `limita` |
 | `EroareNegasit` | 404: vehicul inexistent în cont | |
 | `EroareConflict` | 409: `VEHICUL_EXISTENT` | |
-| `EroareLimita` | 429: cotă, plafon de flotă sau polling prea des | `cod`, `retry_after_ms`, `utilizare_zi`, `utilizare_luna` |
-| `EroareServer` | 5xx; la numere disponibile `OCUPAT`, `INDISPONIBIL`, `EROARE_DGPCI`, `TIMEOUT` | `status`, `cod`, `retry_after_ms` |
+| `EroareLimita` | 429: cotă (`DAILY_LIMIT_REACHED`, `PLAN_LIMIT_REACHED`), plafon de flotă sau polling prea des | `cod`, `retry_after_ms`, `utilizare_zi`, `utilizare_luna` |
+| `EroareServer` | 5xx; sursa oficială (`UPSTREAM_*`), sau `OCUPAT`, `INDISPONIBIL` la numere disponibile | `status`, `cod`, `retry_after_ms` |
 | `EroareHttp` | Alt status HTTP neașteptat, inclusiv redirecturi | `status` |
 | `EroareRetea` | Fără răspuns sau timeout | `timeout`, `neajunsa` |
 | `EroareRaspunsInvalid` | Răspuns cu formă neașteptată | `raspuns` |
-| `EroareVerificare` | Sursa nu a răspuns sau a refuzat datele trimise; `cod` e mereu `VERIFICARE_ESUATA` | `cod_sursa`: `serie_talon_invalida`, `vin_invalid`, `numar_invalid` sau `None` |
+| `EroareVerificare` | Sursa oficială nu a dat un răspuns sau a refuzat datele | `cod`, `cod_sursa`: `serie_talon_invalida`, `vin_invalid`, `numar_invalid` sau `None` |
 | `EroareTimeoutVerificare` | `asteapta()` sau `imagini.asteapta()` a depășit `timeout_ms` | |
 | `EroareWebhook` | Cheie greșită sau payload invalid | `cod` |
 
@@ -567,7 +597,7 @@ try:
 except EroareValidare as e:
     return arata_utilizatorului(e.mesaj)
 except EroareLimita as e:
-    if e.cod == "COTA_ATINSA":
+    if e.cod == "DAILY_LIMIT_REACHED":
         return amana_pana_maine()
     raise
 except ActeoError as e:
@@ -586,9 +616,9 @@ SDK-ul nu trimite niciodată de două ori o verificare taxată.
 | Rețea căzută, timeout la citirea răspunsului | se reîncearcă | nu (cererea poate să fi ajuns) |
 | Redirect (3xx) | nu, `EroareHttp` | nu |
 | DNS, conexiune refuzată, eroare TLS, timeout la conectare | se reîncearcă | se reîncearcă (sigur nu a ajuns) |
-| 502, 503, 504 fără `cod` | se reîncearcă | se reîncearcă (proxy, nu aplicația) |
+| 502, 503, 504 fără `cod` | se reîncearcă | se reîncearcă (cererea nu a ajuns la API) |
 | 503 `OCUPAT` la numere disponibile | | se reîncearcă după `Retry-After`, dacă acesta nu depășește `intarziere_maxima_ms` (netaxat) |
-| 502, 503, 504 cu alt `cod` | | nu (netaxat, dar repetarea nu ajută imediat) |
+| 502, 503, 504 cu alt `cod` (`UPSTREAM_*`, `INDISPONIBIL`) | | nu (netaxat, dar repetarea nu ajută imediat) |
 | 500 | se reîncearcă | nu |
 | 429 la polling | se reîncearcă după `Retry-After`, dacă acesta nu depășește `intarziere_maxima_ms` | |
 | 429 cotă sau plafon flotă | nu | nu |

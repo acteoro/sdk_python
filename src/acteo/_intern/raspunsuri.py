@@ -89,7 +89,7 @@ def eroare_din_raspuns(status: int, headere: Mapping[str, str], corp: object, ac
     if status == 400:
         return EroareValidare(mesaj, acceptate=c.get("accepted"), **comune)
     if status == 422:
-        # Sursa oficiala refuza valoarea trimisa (ex: NUMAR_RESPINS).
+        # Sursa oficiala refuza valoarea trimisa (INVALID_IDENTIFIER).
         return EroareValidare(mesaj, **comune)
     if status == 401:
         return EroareAutentificare(mesaj, **comune)
@@ -104,6 +104,7 @@ def eroare_din_raspuns(status: int, headere: Mapping[str, str], corp: object, ac
         return EroareConflict(mesaj, **comune)
     if status == 429:
         zi, luna = c.get("dailyUsage"), c.get("monthlyUsage")
+        # Fara cod: un server mai vechi la cota atinsa, sau throttle-ul de polling.
         comune["cod"] = comune["cod"] or ("COTA_ATINSA" if zi or luna else "PREA_MULTE_CERERI")
         return EroareLimita(
             mesaj,

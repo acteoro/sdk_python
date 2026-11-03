@@ -19,7 +19,7 @@ def se_poate_reincerca(idempotenta: bool, eroare: VerificRcaError, retry: Setari
         if idempotenta:
             return True
         # Cu `cod`, a raspuns chiar API-ul si cererea nu s-a taxat. Reincercam doar `OCUPAT`,
-        # care trece in cateva secunde; restul nu se rezolva repetand.
+        # care trece in cateva secunde; restul (`UPSTREAM_*`, `INDISPONIBIL`) nu se rezolva repetand.
         if eroare.cod is not None:
             return eroare.cod == "OCUPAT" and (eroare.retry_after_ms or 0) <= retry.intarziere_maxima_ms
         return eroare.status in _CODURI_PROXY
