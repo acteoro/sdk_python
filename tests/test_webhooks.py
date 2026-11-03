@@ -22,6 +22,7 @@ from acteo import (
     WebhookTermenExpira,
     WebhookTest,
     parseaza_webhook_rezultat,
+    parseaza_webhook_rezultat_pad,
     verifica_webhook_notificare,
 )
 
@@ -357,3 +358,43 @@ def test_datele_iso_devin_datetime_cele_calendaristice_raman_text() -> None:
 )
 def test_evenimente_noi_invalide(corp: object) -> None:
     assert cod_eroare(corp, {HEADER_CHEIE: CHEIE}, CHEIE) == "PAYLOAD_INVALID"
+
+
+PAD_BAZA = {
+    "requestId": "3f2c8a54-0000-4000-8000-000000000000",
+    "cnpMascat": "1*********012",
+    "judet": "Cluj",
+    "localitate": "Cluj-Napoca",
+    "laData": "2026-11-03",
+}
+
+
+def test_rezultat_pad_done_si_error() -> None:
+    gata = {
+        **PAD_BAZA,
+        "status": "done",
+        "valabila": True,
+        "serieNumar": "PAD-0001",
+        "distribuitor": None,
+        "verificatLa": "2026-11-03T10:02:00.000Z",
+    }
+    r = parseaza_webhook_rezultat_pad(json.dumps(gata).encode())
+    assert (r.status, r.valabila, r.serie_numar, r.code) == ("done", True, "PAD-0001", None)
+    assert isinstance(r.verificat_la, datetime)
+
+    e = parseaza_webhook_rezultat_pad({**PAD_BAZA, "status": "error", "code": "UPSTREAM_CHANGED", "error": "Sursa."})
+    assert (e.status, e.code, e.valabila) == ("error", "UPSTREAM_CHANGED", None)
+
+
+@pytest.mark.parametrize(
+    "corp",
+    [
+        {**PAD_BAZA, "status": "processing"},
+        {**PAD_BAZA, "status": "done"},
+        {**PAD_BAZA, "status": "error"},
+    ],
+)
+def test_rezultat_pad_invalid(corp: object) -> None:
+    with pytest.raises(EroareWebhook) as info:
+        parseaza_webhook_rezultat_pad(corp)  # type: ignore[arg-type]
+    assert info.value.cod == "PAYLOAD_INVALID"

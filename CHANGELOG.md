@@ -2,6 +2,14 @@
 
 Toate schimbările importante ale pachetului `acteo` (fost `verificrca`) sunt notate aici.
 
+## acteo (nelansat)
+
+- `acteo.casa.pad`: verificarea poliței PAD a unei locuințe, după CNP-ul proprietarului și localitate, cu răspunsul de la PADROM. Metodele sunt cele de la documentele auto: `verifica()`, `porneste()` (cu `callback_url` opțional), `rezultat()` și `asteapta()`, în `Acteo` și în `AsyncActeo`. Cere abonamentul API Verificare poliță PAD și acordul proprietarului (`acord=True`).
+- CNP-ul, acordul, data și `callback_url` sunt validate local, înainte de cerere, deci o greșeală nu consumă din cotă. Răspunsurile arată CNP-ul doar mascat (`cnp_mascat`).
+- `acteo.webhooks.parseaza_rezultat_pad()` și `parseaza_webhook_rezultat_pad()` citesc rezultatul trimis la `callback_url`.
+- `este_cnp_valid()` verifică local forma unui CNP: data de naștere și cifra de control.
+- Modele noi: `PolitaPadPornita`, `RezultatPolitaPad`, `WebhookRezultatPad` și tipul `StatusPolitaPad`.
+
 ## acteo 0.5.0 (2026-11-03)
 
 API-ul trimite acum codurile de eroare din contract. Dacă ai cod care compară `e.cod` cu valorile vechi, schimbă-l după tabelul de mai jos. Clasele de eroare și statusurile HTTP rămân aceleași.

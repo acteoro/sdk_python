@@ -18,7 +18,7 @@ with Acteo() as acteo:  # cheia din ACTEO_API_KEY
     print(rca.status.value, rca.expires_at)  # valid 2027-03-01 00:00:00+00:00
 ```
 
-Apelurile sunt grupate pe domeniu și pe document, deci citești din cod ce verifici: `acteo.auto.rca`, `acteo.auto.itp`, `acteo.auto.rovinieta`, `acteo.auto.arr`, plus `acteo.auto.flota` pentru vehiculele din cont, `acteo.auto.vin`, `acteo.auto.numere` și `acteo.auto.imagini` pentru celelalte produse și `acteo.webhooks` pentru notificări.
+Apelurile sunt grupate pe domeniu și pe document, deci citești din cod ce verifici: `acteo.auto.rca`, `acteo.auto.itp`, `acteo.auto.rovinieta`, `acteo.auto.arr`, plus `acteo.auto.flota` pentru vehiculele din cont, `acteo.auto.vin`, `acteo.auto.numere` și `acteo.auto.imagini` pentru celelalte produse, `acteo.casa.pad` pentru polița PAD a unei locuințe și `acteo.webhooks` pentru notificări.
 
 ## Cuprins
 
@@ -49,6 +49,7 @@ Apelurile sunt grupate pe domeniu și pe document, deci citești din cod ce veri
 | Decodare VIN | `acteo.auto.vin.decodeaza()` | Marca, modelul, anul de fabricație și structura seriei de șasiu |
 | Număr de înmatriculare disponibil | `acteo.auto.numere.verifica()` | Dacă numărul e liber la DGPCI și poate fi rezervat |
 | Poza unei mașini | `acteo.auto.imagini.obtine()` | Link spre o poză de studio (WebP transparent) după marcă, model și an |
+| Verificare poliță PAD | `acteo.casa.pad.verifica()` | Dacă o locuință are poliță PAD valabilă la o dată, după CNP-ul proprietarului și localitate, de la PADROM |
 | Webhook-uri | `acteo.webhooks` | Rezultatul verificării la URL-ul tău, alerte `document.expira` la 30, 14 și 3 zile, plus evenimentele celorlalte servicii din cont |
 | Validare locală | | Numărul de înmatriculare, VIN-ul și numărul talonului sunt verificate înainte de cerere, deci o greșeală de tastare nu consumă din cotă |
 | Excepții tipate | | O clasă de excepție pentru fiecare situație, cu mesaj în română și `hint` de rezolvare |
@@ -363,10 +364,68 @@ Răspunde imediat cu poza mașinii sau cu poza generică. `unghi` poate fi `"tre
 
 Ca `obtine()`, dar cât timp poza e `in-lucru` o cere din nou, cu pauzele din `Retry-After` (cel puțin 10 secunde). Întoarce primul răspuns care nu mai e `in-lucru`. După `timeout_ms` (implicit 2 minute) aruncă `EroareTimeoutVerificare`. Cererile intermediare nu se taxează, dar intră în plafonul zilnic de poze generice.
 
+### `casa.pad.verifica(*, cnp, judet=None, localitate=None, sector=None, judet_id=None, localitate_id=None, data=None, acord, interval_ms=3000, timeout_ms=300000)`
+
+Verifică dacă există o poliță PAD (asigurarea obligatorie a locuinței) valabilă pentru un CNP și o localitate, la o anumită dată. Răspunsul vine de la PADROM și poate dura câteva minute, așa că `verifica()` pornește cererea și așteaptă rezultatul, ca la documentele auto. Cere abonamentul API Verificare poliță PAD, separat de cel de verificări auto.
+
+Ai nevoie de acordul proprietarului. Prin `acord=True` confirmi că îl ai sau că ești chiar proprietarul; fără el, cererea e respinsă local.
+
+| Argument | Obligatoriu | Descriere |
+|---|---|---|
+| `cnp` | da | CNP-ul proprietarului, 13 cifre. Spațiile și liniuțele sunt acceptate. Data și cifra de control sunt verificate local. API-ul nu păstrează CNP-ul și îl arată în răspuns doar mascat (`cnp_mascat`). |
+| `judet` | da, dacă nu trimiți `judet_id` | Numele județului, cu sau fără diacritice, sau indicativul (`"CJ"`, `"B"`) |
+| `localitate` | da, în afară de București | Orașul, comuna sau satul |
+| `sector` | doar la București | Sectorul, de la 1 la 6 |
+| `judet_id`, `localitate_id` | nu | Id-urile din nomenclatorul PADROM, în locul numelor |
+| `data` | nu | Data verificată, `"AAAA-LL-ZZ"`, cel mult 365 de zile înainte sau după azi. Implicit azi |
+| `acord` | da | `True`: ai acordul proprietarului sau ești chiar proprietarul |
+
+```python
+pad = acteo.casa.pad.verifica(
+    cnp="<CNP-ul proprietarului>",
+    judet="Cluj",
+    localitate="Cluj-Napoca",
+    acord=True,
+)
+
+if pad.valabila:
+    print("Poliță PAD valabilă:", pad.serie_numar, pad.distribuitor)
+else:
+    print("PADROM nu a găsit o poliță valabilă la", pad.la_data)
+```
+
+Întoarce un `RezultatPolitaPad` cu `status == "done"`, `valabila` (`True` când PADROM a găsit o poliță valabilă la data cerută), `serie_numar` și `distribuitor` (sau `None`), `verificat_la` (`datetime`), plus `request_id`, `cnp_mascat` (de exemplu `1*********012`), `judet`, `localitate` și `la_data`, ca să legi răspunsul de cererea ta. `interval_ms` (minim 2000) și `timeout_ms` funcționează ca la documentele auto.
+
+Se taxează o unitate doar când PADROM răspunde, inclusiv când refuză datele trimise (`EroareVerificare` cu `cod` `INVALID_IDENTIFIER`). Dacă PADROM nu răspunde, primești `EroareVerificare` cu `UPSTREAM_UNAVAILABLE`, `UPSTREAM_TIMEOUT`, `UPSTREAM_BLOCKED` sau `UPSTREAM_CHANGED` și nu se taxează nimic. Un județ sau o localitate pe care nu le găsim dau `EroareValidare` (HTTP 422) cu `hint`, tot netaxat. Prea multe verificări în curs deodată dau `EroareLimita` cu `cod` `OCUPAT`.
+
+### `casa.pad.porneste(*, cnp, ..., acord, callback_url=None)`
+
+Pornește verificarea fără să aștepte și întoarce un `PolitaPadPornita`, cu `request_id` și `queued_at`. Primește aceleași argumente ca `verifica()`, fără `interval_ms` și `timeout_ms`, plus `callback_url` opțional, unde API-ul trimite rezultatul când e gata.
+
+```python
+p = acteo.casa.pad.porneste(
+    cnp="<CNP-ul proprietarului>",
+    judet="B",
+    sector=3,
+    acord=True,
+    callback_url="https://example.com/webhooks/acteo/pad-7h2m",
+)
+pad = acteo.casa.pad.asteapta(p)  # sau mai târziu, cu p.request_id
+```
+
+### `casa.pad.rezultat(referinta)`
+
+Interoghează o singură dată, după `request_id` sau după obiectul primit de la `porneste()`. Întoarce un `RezultatPolitaPad` cu `status` `"processing"` sau `"done"`; o verificare încheiată cu eroare aruncă `EroareVerificare`. CNP-ul nu apare în URL. Nu consumă din cotă. Cererile se păstrează 30 de zile; după aceea, sau pentru un id din alt cont, primești `EroareNegasit`.
+
+### `casa.pad.asteapta(referinta, *, interval_ms=3000, timeout_ms=300000)`
+
+Face polling până la răspunsul PADROM. Nu consumă din cotă. În `AsyncActeo`, toate cele patru metode sunt `async`.
+
 ### Utilitare de validare
 
 ```python
 from acteo import (
+    este_cnp_valid,
     este_numar_inmatriculare_valid,
     este_serie_talon_valida,
     este_vin_valid,
@@ -379,6 +438,7 @@ este_vin_valid("WVWZZZ1JZXW00000I")  # False: litera I nu e permisă în VIN
 normalizeaza(" b-123 abc ")  # "B123ABC"
 este_serie_talon_valida("I00639603F")  # True
 normalizeaza_serie_talon(" i 00639603-f ")  # "I00639603F"
+este_cnp_valid("1900101400013")  # False: cifra de control nu se potrivește
 ```
 
 Le poți folosi în formularele tale (de exemplu într-un validator Django sau Pydantic), ca să verifici datele înainte să ajungă la server.
@@ -425,6 +485,21 @@ async def rezultat(request: Request) -> dict[str, bool]:
 ```
 
 Pune un segment greu de ghicit în URL, păstrează-l pe HTTPS și verifică dacă `request_id`-ul primit corespunde celui întors de `porneste()` înainte să te bazezi pe conținut.
+
+### Rezultatul unei verificări de poliță PAD (`callback_url`)
+
+Când trimiți `callback_url` la `casa.pad.porneste()`, primești un POST cu răspunsul PADROM: `status == "done"` cu `valabila`, `serie_numar` și `distribuitor`, sau `status == "error"` cu `code` și `error`. Corpul conține doar `cnp_mascat`, niciodată CNP-ul.
+
+```python
+@app.post("/webhooks/acteo/pad/7h2m")
+async def rezultat_pad(request: Request) -> dict[str, bool]:
+    r = acteo.webhooks.parseaza_rezultat_pad(await request.body())
+    if r.status == "done":
+        salveaza(r.request_id, r.valabila)
+    return {"ok": True}
+```
+
+Aceleași reguli ca mai sus: URL pe HTTPS, cu un segment greu de ghicit, și `request_id` potrivit cu cel de la `porneste()`.
 
 ### Notificări din cont (`document.expira` și celelalte evenimente)
 
@@ -737,6 +812,10 @@ Apelezi `acteo.auto.numere.verifica("BV07ABC")`. SDK-ul trimite numărul la DGPC
 ### Ce aflu dintr-o serie de șasiu (VIN)?
 
 Cu `acteo.auto.vin.decodeaza(vin)` afli marca, modelul și anul de fabricație, plus structura VIN-ului: producătorul (WMI), țara, cifra de control și anii posibili. Câmpul `sursa_an` spune de unde vine anul, iar `modele_posibile` apare când datele nu indică un singur model.
+
+### Pot verifica prin API dacă o casă are poliță PAD?
+
+Da, cu `acteo.casa.pad.verifica()`. Trimiți CNP-ul proprietarului, județul și localitatea locuinței, iar PADROM răspunde dacă există o poliță PAD valabilă la data cerută (implicit azi). Ai nevoie de acordul proprietarului și de abonamentul API Verificare poliță PAD. Pentru o singură locuință, fără cod, folosește [verificarea PAD de pe site](https://acteo.ro/verificare-pad).
 
 ### Există SDK pentru Node.js sau PHP?
 

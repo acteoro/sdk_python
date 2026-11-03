@@ -36,6 +36,11 @@ _SERIE_TALON = re.compile(r"(?=.*\d)[A-Z0-9]{6,20}", re.ASCII)
 _NU_ALFANUMERIC = re.compile(r"[^A-Z0-9]", re.ASCII)
 _LUNGIME_MAXIMA_TALON = 30
 
+_CNP = re.compile(r"[1-9]\d{12}", re.ASCII)
+_NU_CIFRA = re.compile(r"\D", re.ASCII)
+_DATA_ZI = re.compile(r"\d{4}-\d{2}-\d{2}", re.ASCII)
+_PONDERI_CNP = (2, 7, 9, 1, 4, 6, 3, 5, 8, 2, 7, 9)
+
 TIPURI_VERIFICARE: tuple[TipVerificare, ...] = tuple(TipVerificare)
 """Toate tipurile de verificare acceptate de API, in ordine: rca, itp, rovinieta, arr."""
 
@@ -339,4 +344,86 @@ def valideaza_cerere_imagine(
         if not isinstance(umbra, bool):
             raise _eroare("Trimite `umbra` ca True sau False.", "umbra")
         corp["umbra"] = umbra
+    return corp
+
+
+# --- Casa: polita PAD ---
+
+
+def este_cnp_valid(cnp: str) -> bool:
+    """Verifica un CNP romanesc: 13 cifre, o data de nastere reala si cifra de control.
+
+    Spatiile si liniutele sunt ignorate. Nu spune daca CNP-ul exista.
+
+    >>> este_cnp_valid("1900101400013")  # cifra de control nu se potriveste
+    False
+    """
+    c = _NU_CIFRA.sub("", cnp) if isinstance(cnp, str) else ""
+    if not _CNP.fullmatch(c):
+        return False
+    d = [int(x) for x in c]
+    # Secolul dupa prima cifra (1/2: 1900, 3/4: 1800, 5/6: 2000, 7/8/9: rezidenti, tratati ca 1900).
+    secol = 1800 if d[0] in (3, 4) else 2000 if d[0] in (5, 6) else 1900
+    try:
+        date(secol + d[1] * 10 + d[2], d[3] * 10 + d[4], d[5] * 10 + d[6])
+    except ValueError:
+        return False
+    suma = sum(p * x for p, x in zip(_PONDERI_CNP, d, strict=False)) % 11
+    return (1 if suma == 10 else suma) == d[12]
+
+
+def _este_data_zi(valoare: str) -> bool:
+    if not _DATA_ZI.fullmatch(valoare):
+        return False
+    try:
+        date.fromisoformat(valoare)
+    except ValueError:
+        return False
+    return True
+
+
+def valideaza_cerere_polita_pad(
+    *,
+    cnp: str,
+    judet: str | None,
+    localitate: str | None,
+    sector: int | None,
+    judet_id: str | None,
+    localitate_id: str | None,
+    data: str | None,
+    acord: bool,
+    callback_url: str | None,
+) -> dict[str, object]:
+    """Corpul cererii PAD, validat local: CNP, acord, data si `callback_url`.
+
+    Judetul si localitatea le potriveste API-ul pe nomenclatorul PADROM.
+    """
+    if not isinstance(cnp, str) or not cnp.strip():
+        raise _eroare("Lipseste `cnp`.", "cnp")
+    curat = _NU_CIFRA.sub("", cnp)
+    # Mesajul nu repeta CNP-ul: ajunge des in loguri.
+    if not este_cnp_valid(curat):
+        raise _eroare("CNP invalid: verifica cele 13 cifre, data sau cifra de control nu se potrivesc.", "cnp")
+    if acord is not True:
+        raise _eroare(
+            "Lipseste acordul: trimite `acord=True` (ai acordul proprietarului sau esti chiar proprietarul).", "acord"
+        )
+    if data is not None and (not isinstance(data, str) or not _este_data_zi(data)):
+        raise _eroare("`data` trebuie sa fie o data reala, AAAA-LL-ZZ (ex: 2026-11-03).", "data")
+    url = _valideaza_callback_url(callback_url)
+
+    corp: dict[str, object] = {"cnp": curat}
+    for cheie, valoare in (
+        ("judet", judet),
+        ("localitate", localitate),
+        ("sector", sector),
+        ("judetId", judet_id),
+        ("localitateId", localitate_id),
+        ("data", data),
+    ):
+        if valoare is not None:
+            corp[cheie] = valoare
+    corp["acord"] = True
+    if url is not None:
+        corp["callbackUrl"] = url
     return corp

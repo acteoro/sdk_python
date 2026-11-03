@@ -6,19 +6,22 @@ from collections.abc import Callable, Mapping
 
 import httpx
 
-from ._intern import documente, produse
+from ._intern import documente, polita_pad, produse
 from ._intern.ceas import CeasAsync
 from ._intern.http_async import HttpAsync
 from ._intern.setari import PROFIL_ACTEO, SetariRetry
-from ._intern.verificari import INTERVAL_IMPLICIT_MS, TIMEOUT_IMPLICIT_MS
+from ._intern.verificari import INTERVAL_IMPLICIT_MS, TIMEOUT_IMPLICIT_MS, valideaza_asteptare
 from .client_acteo import ClientWebhooks
 from .client_async import AsyncClientVehicule, AsyncClientVerificari, _ClientAsincron
+from .erori import EroareTimeoutVerificare
 from .modele import (
     DecodareVin,
     ImagineMasina,
     NumarDisponibil,
+    PolitaPadPornita,
     RezultatArr,
     RezultatItp,
+    RezultatPolitaPad,
     RezultatRca,
     RezultatRovinieta,
     VerificareInCurs,
@@ -312,6 +315,125 @@ class AsyncClientAuto:
         """Pozele masinilor: `await acteo.auto.imagini.obtine(marca=..., model=..., an=...)`."""
 
 
+class AsyncClientPad:
+    """Varianta async a `ClientPad`: verificarea politei PAD, la PADROM. Il accesezi prin `acteo.casa.pad`.
+
+    Cauta dupa CNP-ul proprietarului si localitatea locuintei. Cere abonamentul API Verificare polita PAD
+    si acordul proprietarului (`acord=True`). Verificarea e asincrona si poate dura cateva minute.
+    `verifica()` si `porneste()` se taxeaza doar cand PADROM raspunde; `rezultat()` si `asteapta()` sunt
+    gratuite. CNP-ul nu apare in raspunsuri, doar `cnp_mascat`.
+    """
+
+    def __init__(self, http: HttpAsync, ceas: CeasAsync) -> None:
+        self._http = http
+        self._ceas = ceas
+
+    async def verifica(
+        self,
+        *,
+        cnp: str,
+        judet: str | None = None,
+        localitate: str | None = None,
+        sector: int | None = None,
+        judet_id: str | None = None,
+        localitate_id: str | None = None,
+        data: str | None = None,
+        acord: bool,
+        interval_ms: float = INTERVAL_IMPLICIT_MS,
+        timeout_ms: float = TIMEOUT_IMPLICIT_MS,
+    ) -> RezultatPolitaPad:
+        """Verifica polita si asteapta raspunsul PADROM (`status == "done"`, verdictul in `valabila`).
+
+        Arunca `EroareValidare` (CNP, acord sau data invalide, local; judet sau localitate negasite, HTTP 422,
+        netaxat), `EroarePlanInactiv`, `EroareLimita` (cota atinsa sau `OCUPAT`: prea multe verificari in curs),
+        `EroareVerificare` (PADROM a refuzat datele, `INVALID_IDENTIFIER`, sau nu a raspuns) si
+        `EroareTimeoutVerificare`.
+        """
+        pornita = await self.porneste(
+            cnp=cnp,
+            judet=judet,
+            localitate=localitate,
+            sector=sector,
+            judet_id=judet_id,
+            localitate_id=localitate_id,
+            data=data,
+            acord=acord,
+        )
+        return await self.asteapta(pornita, interval_ms=interval_ms, timeout_ms=timeout_ms)
+
+    async def porneste(
+        self,
+        *,
+        cnp: str,
+        judet: str | None = None,
+        localitate: str | None = None,
+        sector: int | None = None,
+        judet_id: str | None = None,
+        localitate_id: str | None = None,
+        data: str | None = None,
+        acord: bool,
+        callback_url: str | None = None,
+    ) -> PolitaPadPornita:
+        """Porneste verificarea fara sa astepte; afli raspunsul cu `asteapta()`, `rezultat()` sau la `callback_url`."""
+        cerere = polita_pad.cerere_porneste(
+            cnp=cnp,
+            judet=judet,
+            localitate=localitate,
+            sector=sector,
+            judet_id=judet_id,
+            localitate_id=localitate_id,
+            data=data,
+            acord=acord,
+            callback_url=callback_url,
+        )
+        return polita_pad.interpreteaza_pornita(await self._http.trimite(cerere))
+
+    async def rezultat(self, referinta: PolitaPadPornita | str, /) -> RezultatPolitaPad:
+        """Interogheaza o singura data, dupa `request_id` sau raspunsul de la `porneste()`. Gratuit.
+
+        Arunca `EroareVerificare` cand verificarea s-a incheiat cu eroare si `EroareNegasit` cand cererea nu
+        exista in contul cheii sau a trecut de 30 de zile.
+        """
+        return polita_pad.interpreteaza(
+            await self._http.trimite(polita_pad.cerere_rezultat(polita_pad.id_din(referinta)))
+        )
+
+    async def asteapta(
+        self,
+        referinta: PolitaPadPornita | str,
+        /,
+        *,
+        interval_ms: float = INTERVAL_IMPLICIT_MS,
+        timeout_ms: float = TIMEOUT_IMPLICIT_MS,
+    ) -> RezultatPolitaPad:
+        """Interogheaza periodic pana la raspunsul PADROM. Gratuit. Arunca `EroareTimeoutVerificare`."""
+        rid = polita_pad.id_din(referinta)
+        interval, timeout_ms = valideaza_asteptare(interval_ms, timeout_ms)
+        termen = self._ceas.monoton_ms() + timeout_ms
+        while True:
+            ramas = termen - self._ceas.monoton_ms()
+            if ramas <= 0:
+                break
+            await self._ceas.dormi_ms(min(interval, ramas))
+            if self._ceas.monoton_ms() >= termen:
+                break
+            try:
+                raspuns = polita_pad.interpreteaza(await self._http.trimite(polita_pad.cerere_rezultat(rid), termen))
+            except EroareTimeoutVerificare as e:
+                raise polita_pad.eroare_depasit(rid, timeout_ms) from e
+            if raspuns.status == "done":
+                return raspuns
+        raise polita_pad.eroare_depasit(rid, timeout_ms)
+
+
+class AsyncClientCasa:
+    """Varianta async a `ClientCasa`: polita PAD a unei locuinte. Il accesezi prin `acteo.casa`."""
+
+    def __init__(self, http: HttpAsync, ceas: CeasAsync) -> None:
+        self.pad = AsyncClientPad(http, ceas)
+        """Polita PAD: `acteo.casa.pad.verifica(cnp=..., judet="Cluj", localitate="Cluj-Napoca", acord=True)`."""
+
+
 class AsyncActeo(_ClientAsincron):
     """Clientul asincron al API-ului Acteo, organizat pe domenii.
 
@@ -319,7 +441,7 @@ class AsyncActeo(_ClientAsincron):
     ...     rca = await acteo.auto.rca.verifica("B123ABC")
 
     `acteo.auto.rca`, `.itp`, `.rovinieta`, `.arr`, `acteo.auto.flota`, `.vin`, `.numere`,
-    `.imagini` si `acteo.webhooks`.
+    `.imagini`, `acteo.casa.pad` si `acteo.webhooks`.
     Cheia vine din `api_key`, altfel din `ACTEO_API_KEY`, apoi din `VERIFICRCA_API_KEY`.
     `http_client` permite un `httpx.AsyncClient` propriu; SDK-ul nu il inchide. Constructorul nu
     face cereri pe retea.
@@ -352,5 +474,7 @@ class AsyncActeo(_ClientAsincron):
             AsyncClientVerificari(self._http, self._ceas), AsyncClientVehicule(self._http), self._http, self._ceas
         )
         """Documentele unei masini, flota, VIN, numere si poze."""
+        self.casa = AsyncClientCasa(self._http, self._ceas)
+        """Locuinta: verificarea politei PAD."""
         self.webhooks = ClientWebhooks()
         """Citirea webhook-urilor."""

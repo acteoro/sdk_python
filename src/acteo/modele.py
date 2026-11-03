@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict
+from pydantic import AwareDatetime, BaseModel, ConfigDict, model_validator
 from pydantic.alias_generators import to_camel
 
 from .tipuri import StatusDocument, StatusImagine, StatusWebhook, TipVerificare, UnghiImagine
@@ -553,3 +553,89 @@ class ImagineMasina(Baza):
     """Cota ramasa dupa aceasta cerere, cand API-ul o trimite."""
     retry_after_ms: int | None = None
     """La `status == "in-lucru"`: dupa cat timp sa ceri din nou poza, din `Retry-After`."""
+
+
+# --- Casa: polita PAD ---
+
+
+class _BazaPolitaPad(Baza):
+    """Campurile care leaga raspunsul de cerere. CNP-ul vine doar mascat."""
+
+    request_id: str
+    """ID-ul cererii. Il folosesti la `rezultat()` si apare si in webhook."""
+    cnp_mascat: str
+    """CNP-ul cu cifrele din mijloc ascunse, ex: `1*********012`."""
+    judet: str
+    """Judetul, cum apare in nomenclatorul PADROM."""
+    localitate: str
+    """Localitatea, cum apare in nomenclatorul PADROM."""
+    la_data: str
+    """Data la care s-a verificat polita, `AAAA-LL-ZZ`."""
+
+
+class PolitaPadPornita(_BazaPolitaPad):
+    """Verificarea PAD a pornit: PADROM e interogat acum. Paseaz-o la `rezultat()` sau `asteapta()`."""
+
+    status: Literal["processing"]
+    queued_at: AwareDatetime
+    """Cand a pornit verificarea."""
+    poll_url: str
+    """Cererea GET de polling, cu id-ul deja completat."""
+    limite: Limite | None = None
+    """Cota ramasa dupa cererea POST, cand API-ul o trimite."""
+
+
+class RezultatPolitaPad(_BazaPolitaPad):
+    """Raspunsul la `rezultat()` sau `asteapta()`: verdictul PADROM (`done`) sau cererea in curs (`processing`).
+
+    O verificare incheiata cu eroare arunca `EroareVerificare`.
+    """
+
+    status: Literal["processing", "done"]
+    valabila: bool | None = None
+    """La `done`: `True` daca PADROM a gasit o polita valabila la data ceruta; `None` cat e in curs."""
+    serie_numar: str | None = None
+    """Seria si numarul politei, cand PADROM le arata."""
+    distribuitor: str | None = None
+    """Asiguratorul care a emis polita, cand PADROM il arata."""
+    verificat_la: AwareDatetime | None = None
+    """La `done`: cand a raspuns PADROM."""
+    queued_at: AwareDatetime | None = None
+    """La `processing`: cand a pornit verificarea."""
+
+    @model_validator(mode="after")
+    def _complet(self) -> RezultatPolitaPad:
+        if self.status == "done" and (self.valabila is None or self.verificat_la is None):
+            raise ValueError("la status done lipsesc valabila sau verificatLa")
+        if self.status == "processing" and self.queued_at is None:
+            raise ValueError("la status processing lipseste queuedAt")
+        return self
+
+
+class WebhookRezultatPad(_BazaPolitaPad):
+    """Payloadul POST trimis la `callback_url` cand verificarea unei polite PAD se termina.
+
+    `done` cu verdictul sau `error` cu `code`. Corpul contine doar CNP-ul mascat.
+    """
+
+    status: Literal["done", "error"]
+    valabila: bool | None = None
+    """La `done`: `True` daca PADROM a gasit o polita valabila la data ceruta."""
+    serie_numar: str | None = None
+    """Seria si numarul politei, cand PADROM le arata."""
+    distribuitor: str | None = None
+    """Asiguratorul care a emis polita, cand PADROM il arata."""
+    verificat_la: AwareDatetime | None = None
+    """La `done`: cand a raspuns PADROM."""
+    code: str | None = None
+    """La `error`: motivul (`CodEsecVerificare`)."""
+    error: str | None = None
+    """La `error`: mesajul, in romana."""
+
+    @model_validator(mode="after")
+    def _complet(self) -> WebhookRezultatPad:
+        if self.status == "done" and (self.valabila is None or self.verificat_la is None):
+            raise ValueError("la status done lipsesc valabila sau verificatLa")
+        if self.status == "error" and self.error is None:
+            raise ValueError("la status error lipseste error")
+        return self

@@ -52,6 +52,15 @@ StatusImagine = Literal["gata", "in-lucru", "necunoscut", "indisponibil"]
 In afara de `gata`, primesti poza generica (masina sub husa), netaxata.
 """
 
+StatusPolitaPad = Literal["processing", "done", "error"]
+"""Starea unei verificari de polita PAD.
+
+- `processing`: PADROM nu a raspuns inca; mai intreaba peste cateva secunde;
+- `done`: PADROM a raspuns, verdictul e in `valabila`;
+- `error`: PADROM a refuzat datele (`INVALID_IDENTIFIER`) sau nu a raspuns. Apare doar in webhook;
+  `rezultat()` si `asteapta()` arunca `EroareVerificare`.
+"""
+
 
 class CodEroare(str, Enum):
     """Codurile stabile pe care API-ul le pune in `code`, in ordinea din documentatie.

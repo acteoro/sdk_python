@@ -4,6 +4,7 @@ from acteo import (
     TIPURI_VERIFICARE,
     EroareValidare,
     TipVerificare,
+    este_cnp_valid,
     este_numar_inmatriculare_valid,
     este_serie_talon_valida,
     este_vin_valid,
@@ -224,3 +225,24 @@ def test_vehicul_nou_invalid(numar: str | None, serie: str | None, camp: str, me
     assert (info.value.camp, info.value.cod) == (camp, "VALIDARE_LOCALA")
     if mesaj is not None:
         assert info.value.mesaj == mesaj
+
+
+@pytest.mark.parametrize("cnp", ["1900101400012", "190 0101-400012"])
+def test_este_cnp_valid_accepta_cnp_ul_sintetic(cnp: str) -> None:
+    assert este_cnp_valid(cnp)
+
+
+@pytest.mark.parametrize(
+    "cnp",
+    [
+        "1900101400013",  # cifra de control gresita
+        "1901301400012",  # luna 13
+        "1900230400012",  # 30 februarie
+        "190010140001",  # prea scurt
+        "0900101400012",  # prima cifra 0
+        "",
+        "\u0661900101400012",  # cifra arabo-indiana
+    ],
+)
+def test_este_cnp_valid_respinge(cnp: str) -> None:
+    assert not este_cnp_valid(cnp)

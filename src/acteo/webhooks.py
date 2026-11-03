@@ -22,6 +22,7 @@ from .modele import (
     WebhookMarcaSchimbare,
     WebhookNotificare,
     WebhookRezultat,
+    WebhookRezultatPad,
     WebhookTermenExpira,
     WebhookTest,
 )
@@ -105,6 +106,16 @@ def parseaza_webhook_rezultat(corp: Corp) -> WebhookRezultat:
     Arunca `EroareWebhook` (`JSON_INVALID`, `PAYLOAD_INVALID`).
     """
     return _decodeaza(WebhookRezultat, _parseaza_corp(corp))
+
+
+def parseaza_webhook_rezultat_pad(corp: Corp) -> WebhookRezultatPad:
+    """Citeste rezultatul trimis la `callback_url` dupa o verificare de polita PAD.
+
+    Corpul nu contine CNP-ul, doar `cnp_mascat`. Foloseste un `callback_url` pe HTTPS, greu de ghicit,
+    si potriveste `request_id` cu cel primit la `casa.pad.porneste()` inainte sa ai incredere in continut.
+    Arunca `EroareWebhook` (`JSON_INVALID`, `PAYLOAD_INVALID`).
+    """
+    return _decodeaza(WebhookRezultatPad, _parseaza_corp(corp))
 
 
 def verifica_webhook_notificare(corp: Corp, headere: Any, cheie: str) -> WebhookNotificare:
